@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Local Music</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===================== TELAS ===================== -->
+  <main id="screens">
+
+    <!-- TELA: INÍCIO -->
+    <section id="screen-home" class="screen active" role="main" aria-label="Início">
+
+      <header class="screen-header">
+        <div class="logo">
+          <span class="logo-icon">♪</span>
+          <span class="logo-text">Local Music</span>
+        </div>
+        <button class="icon-btn" id="btn-open-folder" aria-label="Abrir pasta de músicas">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </button>
+      </header>
+
+      <!-- Estado vazio -->
+      <div id="home-empty" class="empty-state">
+        <div class="empty-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <h2 class="empty-title">Sua música, do seu jeito</h2>
+        <p class="empty-sub">Abra uma pasta com suas músicas para começar</p>
+        <button class="btn-primary" id="btn-open-folder-empty">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Abrir pasta de músicas
+        </button>
+      </div>
+
+      <!-- Conteúdo da biblioteca -->
+      <div id="home-content" class="hidden">
+
+        <!-- Última música -->
+        <section class="home-section" id="section-last-track">
+          <h3 class="section-title">Última tocada</h3>
+          <div class="last-track-card" id="last-track-card">
+            <div class="last-track-cover" id="last-track-cover">
+              <div class="default-cover">♪</div>
+            </div>
+            <div class="last-track-info">
+              <p class="last-track-name" id="last-track-name">—</p>
+              <p class="last-track-artist" id="last-track-artist">—</p>
+            </div>
+            <button class="play-btn-round" id="btn-play-last" aria-label="Tocar última música">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+            </button>
+          </div>
+        </section>
+
+        <!-- Recentes -->
+        <section class="home-section">
+          <h3 class="section-title">Adicionadas recentemente</h3>
+          <div class="scroll-row" id="recent-tracks"></div>
+        </section>
+
+        <!-- Álbuns -->
+        <section class="home-section">
+          <h3 class="section-title">Álbuns</h3>
+          <div class="scroll-row" id="home-albums"></div>
+        </section>
+
+        <!-- Artistas -->
+        <section class="home-section">
+          <h3 class="section-title">Artistas</h3>
+          <ul class="artist-list" id="home-artists"></ul>
+        </section>
+
+      </div>
+    </section>
+
+    <!-- TELA: EXPLORAR -->
+    <section id="screen-explore" class="screen" role="main" aria-label="Explorar">
+
+      <header class="screen-header">
+        <h2 class="screen-title">Explorar</h2>
+      </header>
+
+      <div class="search-bar-wrap">
+        <div class="search-bar">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="search-input" class="search-input" placeholder="Músicas, artistas, álbuns..." autocomplete="off" />
+          <button class="search-clear hidden" id="search-clear" aria-label="Limpar busca">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Resultado da busca -->
+      <div id="search-results" class="hidden">
+        <ul class="track-list" id="search-list"></ul>
+      </div>
+
+      <!-- Abas internas -->
+      <div id="explore-tabs-wrap">
+        <nav class="tabs" role="tablist" aria-label="Explorar categorias">
+          <button class="tab active" role="tab" data-tab="tracks" aria-selected="true">Músicas</button>
+          <button class="tab" role="tab" data-tab="albums" aria-selected="false">Álbuns</button>
+          <button class="tab" role="tab" data-tab="artists" aria-selected="false">Artistas</button>
+          <button class="tab" role="tab" data-tab="download" aria-selected="false">Baixar</button>
+        </nav>
+
+        <!-- Aba: Músicas -->
+        <div id="tab-tracks" class="tab-content active">
+          <div class="sort-bar">
+            <span class="sort-label">Ordenar:</span>
+            <select class="sort-select" id="sort-tracks" aria-label="Ordenar músicas">
+              <option value="name">A–Z</option>
+              <option value="artist">Artista</option>
+              <option value="album">Álbum</option>
+              <option value="duration">Duração</option>
+            </select>
+          </div>
+          <ul class="track-list" id="all-tracks-list"></ul>
+        </div>
+
+        <!-- Aba: Álbuns -->
+        <div id="tab-albums" class="tab-content hidden">
+          <div class="album-grid" id="albums-grid"></div>
+        </div>
+
+        <!-- Aba: Artistas -->
+        <div id="tab-artists" class="tab-content hidden">
+          <ul class="artist-list" id="artists-list"></ul>
+        </div>
+
+        <!-- Aba: Baixar -->
+        <div id="tab-download" class="tab-content hidden">
+          <div class="download-panel">
+            <div class="download-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <h3 class="download-title">Baixar do YouTube</h3>
+            <p class="download-sub">Cole a URL de um vídeo ou música do YouTube e baixe em MP3 direto no seu dispositivo.</p>
+            <div class="download-input-row">
+              <input type="url" id="download-url" class="download-input" placeholder="https://youtube.com/watch?v=..." autocomplete="off" />
+            </div>
+            <button class="btn-primary" id="btn-download" aria-label="Baixar música">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Baixar MP3
+            </button>
+            <div id="download-status" class="download-status hidden"></div>
+            <p class="download-hint">Após o download, mova o arquivo MP3 para a pasta de músicas e reabra a biblioteca.</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TELA: PLAYLISTS -->
+    <section id="screen-playlists" class="screen" role="main" aria-label="Playlists">
+
+      <header class="screen-header">
+        <h2 class="screen-title">Playlists</h2>
+        <button class="icon-btn" id="btn-new-playlist" aria-label="Nova playlist">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </header>
+
+      <!-- Favoritos fixo no topo -->
+      <div class="playlist-card favorites-card" id="card-favorites" role="button" tabindex="0" aria-label="Abrir favoritos">
+        <div class="playlist-cover favorites-cover">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </div>
+        <div class="playlist-info">
+          <p class="playlist-name">Favoritos</p>
+          <p class="playlist-count" id="favorites-count">0 músicas</p>
+        </div>
+        <svg class="playlist-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+
+      <!-- Lista de playlists do usuário -->
+      <div id="playlists-list"></div>
+
+      <!-- Estado vazio de playlists -->
+      <div id="playlists-empty" class="empty-state-small hidden">
+        <p>Nenhuma playlist criada ainda.</p>
+        <p>Toque em <strong>+</strong> para criar uma.</p>
+      </div>
+
+      <!-- Detalhe de playlist (sobreposição interna) -->
+      <div id="playlist-detail" class="playlist-detail hidden">
+        <button class="btn-back" id="btn-back-playlist" aria-label="Voltar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          <span id="detail-playlist-name">Playlist</span>
+        </button>
+        <ul class="track-list" id="detail-tracks-list"></ul>
+      </div>
+
+    </section>
+
+    <!-- TELA: VOCÊ -->
+    <section id="screen-profile" class="screen" role="main" aria-label="Perfil">
+
+      <header class="screen-header">
+        <h2 class="screen-title">Você</h2>
+      </header>
+
+      <!-- Avatar e nome -->
+      <div class="profile-hero">
+        <div class="avatar-wrap">
+          <div class="avatar" id="avatar-display">
+            <span id="avatar-initials">?</span>
+            <img id="avatar-img" class="hidden" alt="Foto de perfil" />
+          </div>
+          <label class="avatar-edit-btn" for="avatar-input" aria-label="Trocar foto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </label>
+          <input type="file" id="avatar-input" accept="image/*" class="hidden" aria-label="Selecionar foto de perfil" />
+        </div>
+        <div class="profile-name-wrap">
+          <p class="profile-name" id="profile-name" contenteditable="true" spellcheck="false">Seu nome</p>
+          <p class="profile-name-hint">Toque para editar</p>
+        </div>
+      </div>
+
+      <!-- Estatísticas -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value" id="stat-tracks">0</span>
+          <span class="stat-label">Músicas</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-artists">0</span>
+          <span class="stat-label">Artistas</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-albums">0</span>
+          <span class="stat-label">Álbuns</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value" id="stat-playlists">0</span>
+          <span class="stat-label">Playlists</span>
+        </div>
+      </div>
+
+      <!-- Configurações -->
+      <div class="settings-list">
+
+        <div class="settings-group">
+          <p class="settings-group-title">Aparência</p>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              <span>Tema claro</span>
+            </div>
+            <label class="toggle" aria-label="Alternar tema claro">
+              <input type="checkbox" id="toggle-theme" role="switch" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <p class="settings-group-title">Biblioteca</p>
+          <button class="settings-row settings-btn" id="btn-change-folder">
+            <div class="settings-row-info">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span>Trocar pasta de músicas</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="settings-row settings-btn" id="btn-export-playlists">
+            <div class="settings-row-info">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Exportar playlists</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="settings-row settings-btn" id="btn-import-playlists">
+            <div class="settings-row-info">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Importar playlists</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <input type="file" id="import-input" accept=".json" class="hidden" aria-label="Importar arquivo de playlists" />
+        </div>
+
+        <div class="settings-group">
+          <p class="settings-group-title">Sobre</p>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Local Music</span>
+            </div>
+            <span class="settings-value">v1.0.0</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== PLAYER BAR ===================== -->
+  <div id="player-bar" class="player-bar hidden" role="region" aria-label="Player de música">
+    <div class="player-progress-wrap">
+      <div class="player-progress-bg" id="player-progress-bg" role="slider" aria-label="Progresso da música" tabindex="0">
+        <div class="player-progress-fill" id="player-progress-fill"></div>
+      </div>
+    </div>
+    <div class="player-inner">
+      <div class="player-track" id="player-track-info">
+        <div class="player-cover" id="player-cover">
+          <div class="default-cover small">♪</div>
+        </div>
+        <div class="player-info">
+          <p class="player-name" id="player-name">—</p>
+          <p class="player-artist" id="player-artist">—</p>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button class="ctrl-btn" id="btn-prev" aria-label="Música anterior">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
+        </button>
+        <button class="ctrl-btn play-pause" id="btn-play-pause" aria-label="Reproduzir ou pausar">
+          <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <button class="ctrl-btn" id="btn-next" aria-label="Próxima música">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PLAYER EXPANDIDO ===================== -->
+  <div id="player-expanded" class="player-expanded hidden" role="dialog" aria-modal="true" aria-label="Player expandido">
+    <button class="btn-collapse" id="btn-collapse-player" aria-label="Fechar player expandido">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="expanded-cover-wrap">
+      <div class="expanded-cover" id="expanded-cover">
+        <div class="default-cover large">♪</div>
+      </div>
+    </div>
+    <div class="expanded-info">
+      <div class="expanded-track">
+        <div>
+          <p class="expanded-name" id="expanded-name">—</p>
+          <p class="expanded-artist" id="expanded-artist">—</p>
+        </div>
+        <button class="favorite-btn" id="btn-favorite" aria-label="Favoritar música">
+          <svg id="icon-heart-empty" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <svg id="icon-heart-full" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="hidden"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </button>
+      </div>
+      <div class="expanded-progress-wrap">
+        <div class="expanded-progress-bg" id="expanded-progress-bg" role="slider" aria-label="Posição da música" tabindex="0">
+          <div class="expanded-progress-fill" id="expanded-progress-fill"></div>
+        </div>
+        <div class="expanded-time">
+          <span id="expanded-current">0:00</span>
+          <span id="expanded-duration">0:00</span>
+        </div>
+      </div>
+      <div class="expanded-controls">
+        <button class="ctrl-btn mode-btn" id="btn-shuffle" aria-label="Modo aleatório">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+        </button>
+        <button class="ctrl-btn large" id="btn-prev-exp" aria-label="Música anterior">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><rect x="5" y="4" width="2" height="16"/></svg>
+        </button>
+        <button class="ctrl-btn play-pause large" id="btn-play-pause-exp" aria-label="Reproduzir ou pausar">
+          <svg id="icon-play-exp" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          <svg id="icon-pause-exp" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        </button>
+        <button class="ctrl-btn large" id="btn-next-exp" aria-label="Próxima música">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><rect x="17" y="4" width="2" height="16"/></svg>
+        </button>
+        <button class="ctrl-btn mode-btn" id="btn-repeat" aria-label="Modo de repetição">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        </button>
+      </div>
+      <div class="volume-row">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>
+        <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80" aria-label="Volume" />
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+      </div>
+      <button class="btn-add-playlist" id="btn-add-to-playlist" aria-label="Adicionar à playlist">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Adicionar à playlist
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== NAVBAR ===================== -->
+  <nav id="bottom-nav" role="navigation" aria-label="Navegação principal">
+    <button class="nav-item active" data-screen="home" aria-label="Início" aria-current="page">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Início</span>
+    </button>
+    <button class="nav-item" data-screen="explore" aria-label="Explorar">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Explorar</span>
+    </button>
+    <button class="nav-item" data-screen="playlists" aria-label="Playlists">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span>Playlists</span>
+    </button>
+    <button class="nav-item" data-screen="profile" aria-label="Você">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>Você</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ===================== MODAIS ===================== -->
+<div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
+
+  <!-- Modal: Nova playlist -->
+  <div id="modal-new-playlist" class="modal hidden" aria-label="Criar nova playlist">
+    <h3 class="modal-title">Nova playlist</h3>
+    <input type="text" id="playlist-name-input" class="modal-input" placeholder="Nome da playlist" maxlength="40" aria-label="Nome da playlist" />
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancel-playlist">Cancelar</button>
+      <button class="btn-primary" id="btn-confirm-playlist">Criar</button>
+    </div>
+  </div>
+
+  <!-- Modal: Adicionar à playlist -->
+  <div id="modal-add-playlist" class="modal hidden" aria-label="Adicionar à playlist">
+    <h3 class="modal-title">Adicionar à playlist</h3>
+    <ul id="modal-playlists-list" class="modal-list"></ul>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancel-add">Fechar</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== TOAST ===================== -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<!-- ===================== ÁUDIO ===================== -->
+<audio id="audio-player" preload="none"></audio>
+
+<!-- ===================== SCRIPTS ===================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
