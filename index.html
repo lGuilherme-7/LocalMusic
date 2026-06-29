@@ -142,7 +142,7 @@
             </div>
             <h3 class="download-title">Baixar do YouTube</h3>
             <p class="download-sub">Use o Y2mate para baixar músicas do YouTube em MP3 ou M4A. Depois, mova o arquivo para a sua pasta de músicas.</p>
-            <a class="btn-primary download-link" href="https://www.y2mate.com/pt29" target="_blank" rel="noopener">
+            <a class="btn-primary download-link" href="https://y2mate.com" target="_blank" rel="noopener">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               Ir para Y2mate
             </a>
@@ -158,15 +158,16 @@
 
       <header class="screen-header">
         <h2 class="screen-title">Playlists</h2>
-        <button class="icon-btn" id="btn-new-playlist" aria-label="Nova playlist">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
       </header>
 
       <!-- Favoritos -->
       <div class="playlist-card special" id="card-favorites" role="button" tabindex="0" aria-label="Abrir favoritos">
-        <div class="playlist-cover favorites-cover">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <div class="playlist-cover favorites-cover" id="fav-cover-wrap">
+          <img id="fav-cover-img" class="hidden" alt="capa favoritos" style="width:100%;height:100%;object-fit:cover;border-radius:inherit" />
+          <svg id="fav-cover-default" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <button class="cover-edit-btn" id="btn-edit-fav-cover" aria-label="Trocar capa" title="Trocar capa">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
         </div>
         <div class="playlist-info">
           <p class="playlist-name">Favoritos</p>
@@ -190,8 +191,8 @@
       <div id="playlists-list"></div>
 
       <div id="playlists-empty" class="empty-state-small hidden">
-        <p>Nenhuma playlist criada ainda.</p>
-        <p>Toque em <strong>+</strong> para criar uma.</p>
+        <p>Nenhuma pasta detectada.</p>
+        <p>Abra uma pasta que contenha <strong>subpastas</strong> de músicas.</p>
       </div>
 
       <!-- Detalhe de playlist -->
@@ -280,21 +281,6 @@
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
-          <button class="settings-row settings-btn" id="btn-export-playlists">
-            <div class="settings-row-info">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span>Exportar playlists</span>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-          <button class="settings-row settings-btn" id="btn-import-playlists">
-            <div class="settings-row-info">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>Importar playlists</span>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-          <input type="file" id="import-input" accept=".json" class="hidden" aria-label="Importar arquivo de playlists" />
         </div>
 
         <div class="settings-group">
@@ -410,15 +396,10 @@
         <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80" aria-label="Volume" />
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
       </div>
-      <!-- FIX 4: dois botões lado a lado -->
       <div class="expanded-actions">
-        <button class="btn-add-playlist" id="btn-add-to-playlist" aria-label="Adicionar à playlist">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-           Playlist 
-        </button>
-        <button class="btn-go-artist" id="btn-go-artist" aria-label="Criar artista">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="4" x2="12" y2="10"/><line x1="9" y1="7" x2="15" y2="7"/></svg>
-          Criar artista
+        <button class="btn-go-artist" id="btn-go-artist" aria-label="Ver artista" style="grid-column:1/-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Ver artista
         </button>
       </div>
     </div>
@@ -449,20 +430,28 @@
 <!-- ===================== MODAIS ===================== -->
 <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true">
 
-  <div id="modal-new-playlist" class="modal hidden" aria-label="Criar nova playlist">
-    <h3 class="modal-title">Nova playlist</h3>
-    <input type="text" id="playlist-name-input" class="modal-input" placeholder="Nome da playlist" maxlength="40" aria-label="Nome da playlist" />
-    <div class="modal-actions">
-      <button class="btn-secondary" id="btn-cancel-playlist">Cancelar</button>
-      <button class="btn-primary" id="btn-confirm-playlist">Criar</button>
+  <div id="modal-cover-picker" class="modal hidden" aria-label="Escolher capa dos favoritos">
+    <h3 class="modal-title">Capa dos Favoritos</h3>
+    <div class="cover-picker-grid" id="cover-picker-grid">
+      <button class="cover-option" data-cover="">
+        <div class="cover-option-default"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+        <span>Padrão</span>
+      </button>
+      <button class="cover-option" data-cover="covers/fav-1.svg">
+        <img class="cover-option-img" src="covers/fav-1.svg" alt="Coração" />
+        <span>Coração</span>
+      </button>
+      <button class="cover-option" data-cover="covers/fav-2.svg">
+        <img class="cover-option-img" src="covers/fav-2.svg" alt="Vinil" />
+        <span>Vinil</span>
+      </button>
+      <button class="cover-option" data-cover="covers/fav-3.svg">
+        <img class="cover-option-img" src="covers/fav-3.svg" alt="Estrelas" />
+        <span>Estrelas</span>
+      </button>
     </div>
-  </div>
-
-  <div id="modal-add-playlist" class="modal hidden" aria-label="Adicionar à playlist">
-    <h3 class="modal-title">Adicionar à playlist</h3>
-    <ul id="modal-playlists-list" class="modal-list"></ul>
     <div class="modal-actions">
-      <button class="btn-secondary" id="btn-cancel-add">Fechar</button>
+      <button class="btn-secondary" id="btn-cancel-cover">Fechar</button>
     </div>
   </div>
 

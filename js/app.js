@@ -1,16 +1,8 @@
-/**
- * app.js
- * Ponto de entrada do Local Music.
- * Inicializa o app, carrega estado, registra service worker,
- * conecta módulos e define roteamento via navbar.
- */
-
 import Storage   from './storage.js';
 import Library   from './library.js';
 import Player    from './player.js';
 import Queue     from './queue.js';
 import Search    from './search.js';
-import Playlists from './playlists.js';
 import Favorites from './favorites.js';
 import UI        from './ui.js';
 
@@ -18,12 +10,11 @@ const $ = id => document.getElementById(id);
 
 let _sortMode = 'name';
 
-// ── Inicialização ─────────────────────────────────────────────
-
 function init() {
   _restoreTheme();
   _restoreProfile();
   _restoreVolume();
+  _restoreFavCover();
   _bindNav();
   _bindHome();
   _bindPlayer();
@@ -44,7 +35,6 @@ function init() {
 // ── Restauração de estado ─────────────────────────────────────
 
 function _restoreTheme() {
-  // index.html usa data-theme="dark|light" no <html>, não classe light-mode
   const theme = Storage.get('lm_theme') || 'dark';
   document.documentElement.setAttribute('data-theme', theme);
   const toggle = $('toggle-theme');
@@ -64,6 +54,29 @@ function _restoreVolume() {
     slider.style.setProperty('--vol', `${vol}%`);
   }
   Player.setVolume(vol);
+}
+
+function _restoreFavCover() {
+  const cover  = Storage.get('lm_fav_cover') || '';
+  _applyFavCover(cover);
+}
+
+function _applyFavCover(cover) {
+  const img  = $('fav-cover-img');
+  const def  = $('fav-cover-default');
+  if (!img || !def) return;
+  if (cover) {
+    img.src = cover;
+    img.classList.remove('hidden');
+    def.classList.add('hidden');
+  } else {
+    img.classList.add('hidden');
+    def.classList.remove('hidden');
+  }
+  // Marca opção selecionada no picker
+  document.querySelectorAll('.cover-option').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.cover === cover);
+  });
 }
 
 // ── Navegação ─────────────────────────────────────────────────
@@ -155,8 +168,8 @@ function _bindSeekBar(el) {
     el.setPointerCapture(e.pointerId);
     seek(e.clientX);
   });
-  el.addEventListener('pointermove', (e) => { if (active) seek(e.clientX); });
-  el.addEventListener('pointerup',   () => { active = false; el.classList.remove('dragging'); });
+  el.addEventListener('pointermove',   (e) => { if (active) seek(e.clientX); });
+  el.addEventListener('pointerup',     () => { active = false; el.classList.remove('dragging'); });
   el.addEventListener('pointercancel', () => { active = false; el.classList.remove('dragging'); });
 }
 
@@ -179,13 +192,9 @@ function _bindPlayer() {
   _bindSeekBar($('expanded-progress-bg'));
 
   const volSlider = $('volume-slider');
-  function _applyVolumeGradient(val) {
-    volSlider.style.setProperty('--vol', `${val}%`);
-  }
-
   volSlider.addEventListener('input', (e) => {
     const vol = Number(e.target.value);
-    _applyVolumeGradient(vol);
+    volSlider.style.setProperty('--vol', `${vol}%`);
     Player.setVolume(vol);
     Storage.set('lm_volume', vol);
   });
@@ -216,49 +225,12 @@ function _bindPlayer() {
     UI.updateRepeatBtn(mode, repeatBtn);
   });
 
-  $('btn-add-to-playlist').addEventListener('click', () => {
-    const track = Player.getCurrentTrack();
-    if (!track) return;
-    _openAddToPlaylist(track);
-  });
-
+  // Navega para o artista da música tocando
   $('btn-go-artist').addEventListener('click', () => {
     const track = Player.getCurrentTrack();
     if (!track) return;
     UI.closeExpandedPlayer();
-
-    const artistName   = track.artist;
-    const artistTracks = Library.getTracks().filter(t => t.artist === artistName);
-
-    // Cria pasta do artista se não existir, e adiciona a música atual
-    let pl      = Playlists.getAll().find(p => p.name === artistName);
-    let created = false;
-    if (!pl) {
-      pl      = Playlists.create(artistName);
-      created = true;
-    }
-
-    const wasAdded = !pl.tracks.includes(track.id);
-    Playlists.addTrack(pl.id, track.id);
-
-    if (created) {
-      _renderPlaylists();
-      _updateStats();
-      UI.showToast(`Artista "${artistName}" criado!`, 'success');
-    } else if (wasAdded) {
-      UI.showToast(`Música adicionada ao artista "${artistName}"!`, 'success');
-    } else {
-      UI.showToast(`Artista "${artistName}"`, 'info');
-    }
-
-    // Mostra todas as músicas do artista da biblioteca
-    UI.showScreen('playlists');
-    UI.openPlaylistDetail(
-      { id: `artist_${artistName}`, name: artistName },
-      artistTracks,
-      (t) => _playTrack(t, artistTracks),
-      null
-    );
+    _onArtistClick({ name: track.artist });
   });
 
   Player.onTrack((track) => {
@@ -287,7 +259,7 @@ function _bindExplore() {
     searchClear.classList.toggle('hidden', !q);
     if (q) {
       const results = Search.filter(q);
-      UI.renderSearchResults(results, (t) => _playTrack(t, results), true, _openAddToPlaylist);
+      UI.renderSearchResults(results, (t) => _playTrack(t, results), true, null);
     } else {
       UI.renderSearchResults([], null, false, null);
     }
@@ -314,7 +286,7 @@ function _renderExploreTab(mode) {
       default:         return a.title.localeCompare(b.title);
     }
   });
-  UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks), _openAddToPlaylist);
+  UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks), null);
 }
 
 function _onAlbumClick(album) {
@@ -338,17 +310,14 @@ function _onArtistClick(artist) {
   );
 }
 
-// ── Playlists ─────────────────────────────────────────────────
+// ── Playlists (pastas detectadas) ─────────────────────────────
 
 function _bindPlaylists() {
-  $('btn-new-playlist').addEventListener('click', UI.openNewPlaylistModal);
-
   $('card-favorites').addEventListener('click', _openFavoritesDetail);
   $('card-favorites').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') _openFavoritesDetail();
   });
 
-  // card-artists: presente no novo index.html
   $('card-artists').addEventListener('click', _openArtistsDetail);
   $('card-artists').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') _openArtistsDetail();
@@ -360,7 +329,6 @@ function _bindPlaylists() {
     if (si) si.value = '';
   });
 
-  // playlist-search-input: presente no novo index.html
   const playlistSearch = $('playlist-search-input');
   if (playlistSearch) {
     playlistSearch.addEventListener('input', () => {
@@ -370,31 +338,20 @@ function _bindPlaylists() {
 }
 
 function _renderPlaylists() {
-  const all    = Playlists.getAll();
-  const tracks = Library.getTracks();
-  UI.renderPlaylists(all, tracks, _openPlaylistDetail, (id) => {
-    Playlists.remove(id);
-    _renderPlaylists();
-    _updateStats();
-    UI.showToast('Playlist excluída', 'info');
-  });
+  const folders = Library.getFolders();
+  const tracks  = Library.getTracks();
+  UI.renderPlaylists(folders, tracks, _openFolderDetail, null);
 }
 
-function _openPlaylistDetail(playlist) {
-  const tracks = playlist.tracks
+function _openFolderDetail(folder) {
+  const tracks = folder.tracks
     .map(id => Library.getTrackById(id))
     .filter(Boolean);
-
   UI.openPlaylistDetail(
-    playlist,
+    folder,
     tracks,
     (t) => _playTrack(t, tracks),
-    (plId, trackId) => {
-      Playlists.removeTrack(plId, trackId);
-      const updated = Playlists.getById(plId);
-      if (updated) _openPlaylistDetail(updated);
-      _renderPlaylists();
-    }
+    null
   );
 }
 
@@ -417,40 +374,10 @@ function _openArtistsDetail() {
   UI.openArtistsDetail(Library.getArtists(), _onArtistClick);
 }
 
-function _openAddToPlaylist(track) {
-  const playlists = Playlists.getAll();
-  UI.openAddToPlaylistModal(
-    track,
-    playlists,
-    (playlistId) => {
-      Playlists.addTrack(playlistId, track.id);
-      _renderPlaylists();
-      UI.showToast('Adicionado à playlist!', 'success');
-    },
-    () => {
-      const name    = track.artist || 'Artista desconhecido';
-      let   pl      = Playlists.getAll().find(p => p.name === name);
-      let   created = false;
-      if (!pl) { pl = Playlists.create(name); created = true; }
-      const wasNew  = !pl.tracks.includes(track.id);
-      Playlists.addTrack(pl.id, track.id);
-      _renderPlaylists();
-      _updateStats();
-      UI.showToast(
-        created     ? `Artista "${name}" criado!` :
-        wasNew      ? `Adicionado ao artista "${name}"!` :
-                      `Já está no artista "${name}"`,
-        created || wasNew ? 'success' : 'info'
-      );
-    }
-  );
-}
-
 function _updateFavoritesCount() {
   UI.updateFavoritesCount(Favorites.count());
 }
 
-// artists-count: presente no novo index.html
 function _updateArtistsCount() {
   const el    = $('artists-count');
   if (!el) return;
@@ -462,7 +389,6 @@ function _updateArtistsCount() {
 
 function _bindProfile() {
   $('toggle-theme').addEventListener('change', (e) => {
-    // Usa data-theme no <html>, não classe light-mode
     const theme = e.target.checked ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', theme);
     Storage.set('lm_theme', theme);
@@ -491,37 +417,6 @@ function _bindProfile() {
   });
 
   $('btn-change-folder').addEventListener('click', _openFolder);
-
-  $('btn-export-playlists').addEventListener('click', () => {
-    const json = Playlists.exportJSON();
-    const blob = new Blob([json], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'local-music-playlists.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    UI.showToast('Playlists exportadas!', 'success');
-  });
-
-  $('btn-import-playlists').addEventListener('click', () => $('import-input').click());
-
-  $('import-input').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const ok = Playlists.importJSON(ev.target.result);
-      if (ok) {
-        _renderPlaylists();
-        _updateStats();
-        UI.showToast('Playlists importadas!', 'success');
-      } else {
-        UI.showToast('Arquivo inválido.', 'error');
-      }
-    };
-    reader.readAsText(file);
-  });
 }
 
 function _updateStats() {
@@ -530,33 +425,45 @@ function _updateStats() {
     tracks:    s.tracks,
     artists:   s.artists,
     albums:    s.albums,
-    playlists: Playlists.count()
+    playlists: Library.getFolders().length
   });
 }
 
-// ── Modais ────────────────────────────────────────────────────
+// ── Modais (seletor de capa) ──────────────────────────────────
 
 function _bindModals() {
-  $('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === $('modal-overlay')) UI.closeModal();
+  const overlay = $('modal-overlay');
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) _closeModal();
   });
 
-  $('btn-cancel-playlist').addEventListener('click', UI.closeModal);
-  $('btn-cancel-add').addEventListener('click',      UI.closeModal);
+  $('btn-cancel-cover').addEventListener('click', _closeModal);
 
-  $('btn-confirm-playlist').addEventListener('click', () => {
-    const name = $('playlist-name-input').value.trim();
-    if (!name) return;
-    Playlists.create(name);
-    _renderPlaylists();
-    _updateStats();
-    UI.closeModal();
-    UI.showToast(`Playlist "${name}" criada!`, 'success');
+  $('btn-edit-fav-cover').addEventListener('click', (e) => {
+    e.stopPropagation();
+    overlay.classList.remove('hidden');
+    $('modal-cover-picker').classList.remove('hidden');
+    // Marca a opção atual
+    const current = Storage.get('lm_fav_cover') || '';
+    document.querySelectorAll('.cover-option').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.cover === current);
+    });
   });
 
-  $('playlist-name-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') $('btn-confirm-playlist').click();
+  document.querySelectorAll('.cover-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cover = btn.dataset.cover;
+      Storage.set('lm_fav_cover', cover);
+      _applyFavCover(cover);
+      _closeModal();
+    });
   });
+}
+
+function _closeModal() {
+  $('modal-overlay').classList.add('hidden');
+  const picker = $('modal-cover-picker');
+  if (picker) picker.classList.add('hidden');
 }
 
 // ── Service Worker ────────────────────────────────────────────
