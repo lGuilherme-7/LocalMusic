@@ -60,7 +60,10 @@ function _restoreProfile() {
 function _restoreVolume() {
   const vol    = Storage.get('lm_volume') ?? 80;
   const slider = $('volume-slider');
-  if (slider) slider.value = vol;
+  if (slider) {
+    slider.value = vol;
+    slider.style.setProperty('--vol', `${vol}%`);
+  }
   Player.setVolume(vol);
 }
 
@@ -139,6 +142,24 @@ function _playTrack(track, context) {
 
 // ── Player ────────────────────────────────────────────────────
 
+function _bindSeekBar(el) {
+  let active = false;
+  function seek(clientX) {
+    const rect  = el.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    Player.seekRatio(ratio);
+  }
+  el.addEventListener('pointerdown', (e) => {
+    active = true;
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+    seek(e.clientX);
+  });
+  el.addEventListener('pointermove', (e) => { if (active) seek(e.clientX); });
+  el.addEventListener('pointerup',   () => { active = false; el.classList.remove('dragging'); });
+  el.addEventListener('pointercancel', () => { active = false; el.classList.remove('dragging'); });
+}
+
 function _bindPlayer() {
   $('btn-prev').addEventListener('click',       Player.prev);
   $('btn-next').addEventListener('click',       Player.next);
@@ -155,14 +176,16 @@ function _bindPlayer() {
   $('btn-next-exp').addEventListener('click',        Player.next);
   $('btn-play-pause-exp').addEventListener('click',  Player.togglePlayPause);
 
-  $('expanded-progress-bg').addEventListener('click', (e) => {
-    const rect  = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    Player.seekRatio(Math.max(0, Math.min(1, ratio)));
-  });
+  _bindSeekBar($('expanded-progress-bg'));
 
-  $('volume-slider').addEventListener('input', (e) => {
+  const volSlider = $('volume-slider');
+  function _applyVolumeGradient(val) {
+    volSlider.style.setProperty('--vol', `${val}%`);
+  }
+
+  volSlider.addEventListener('input', (e) => {
     const vol = Number(e.target.value);
+    _applyVolumeGradient(vol);
     Player.setVolume(vol);
     Storage.set('lm_volume', vol);
   });
@@ -203,15 +226,37 @@ function _bindPlayer() {
     const track = Player.getCurrentTrack();
     if (!track) return;
     UI.closeExpandedPlayer();
-    // Navega para a tela de playlists e abre o detalhe do artista
-    const artist = Library.getArtists().find(a => a.name === track.artist);
-    if (!artist) { UI.showToast('Artista não encontrado', 'error'); return; }
+
+    const artistName   = track.artist;
+    const artistTracks = Library.getTracks().filter(t => t.artist === artistName);
+
+    // Cria pasta do artista se não existir, e adiciona a música atual
+    let pl      = Playlists.getAll().find(p => p.name === artistName);
+    let created = false;
+    if (!pl) {
+      pl      = Playlists.create(artistName);
+      created = true;
+    }
+
+    const wasAdded = !pl.tracks.includes(track.id);
+    Playlists.addTrack(pl.id, track.id);
+
+    if (created) {
+      _renderPlaylists();
+      _updateStats();
+      UI.showToast(`Artista "${artistName}" criado!`, 'success');
+    } else if (wasAdded) {
+      UI.showToast(`Música adicionada ao artista "${artistName}"!`, 'success');
+    } else {
+      UI.showToast(`Artista "${artistName}"`, 'info');
+    }
+
+    // Mostra todas as músicas do artista da biblioteca
     UI.showScreen('playlists');
-    const tracks = Library.getTracks().filter(t => t.artist === artist.name);
     UI.openPlaylistDetail(
-      { id: `artist_${artist.name}`, name: artist.name },
-      tracks,
-      (t) => _playTrack(t, tracks),
+      { id: `artist_${artistName}`, name: artistName },
+      artistTracks,
+      (t) => _playTrack(t, artistTracks),
       null
     );
   });

@@ -140,16 +140,16 @@
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </div>
             <h3 class="download-title">Baixar do YouTube</h3>
-            <p class="download-sub">Cole a URL de um vídeo do YouTube. Abriremos o cobalt.tools com ela preenchida — baixe lá e mova o MP3 para sua pasta de músicas.</p>
+            <p class="download-sub">Cole o link de qualquer vídeo do YouTube e baixe direto como MP3 — sem conta, sem anúncio.</p>
             <div class="download-input-row">
               <input type="url" id="download-url" class="download-input" placeholder="https://youtube.com/watch?v=..." autocomplete="off" />
             </div>
-            <button class="btn-primary" id="btn-download" aria-label="Abrir no cobalt.tools">
+            <button class="btn-primary" id="btn-download" aria-label="Baixar MP3">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Abrir no cobalt.tools
+              Baixar MP3
             </button>
             <div id="download-status" class="download-status hidden"></div>
-            <p class="download-hint">O cobalt.tools abrirá numa nova aba com a URL preenchida. Após baixar, mova o MP3 para sua pasta de músicas.</p>
+            <p class="download-hint">Download via cobalt.tools (gratuito). Após baixar, mova o MP3 para sua pasta de músicas.</p>
           </div>
         </div>
       </div>
@@ -167,7 +167,7 @@
       </header>
 
       <!-- Favoritos -->
-      <div class="playlist-card favorites-card" id="card-favorites" role="button" tabindex="0" aria-label="Abrir favoritos">
+      <div class="playlist-card special" id="card-favorites" role="button" tabindex="0" aria-label="Abrir favoritos">
         <div class="playlist-cover favorites-cover">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         </div>
@@ -178,8 +178,8 @@
         <svg class="playlist-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
 
-      <!-- FIX 6: card de Artistas -->
-      <div class="playlist-card" id="card-artists" role="button" tabindex="0" aria-label="Abrir artistas">
+      <!-- card de Artistas -->
+      <div class="playlist-card special" id="card-artists" role="button" tabindex="0" aria-label="Abrir artistas">
         <div class="playlist-cover artists-cover">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
@@ -317,7 +317,7 @@
       <div class="profile-footer">
         <div class="profile-footer-divider"></div>
         <p class="profile-footer-name">Guilherme L.</p>
-        <p class="profile-footer-bio">Desenvolvedor freelance apaixonado por criar coisas úteis e bem feitas. O Local Music nasceu da vontade de ter um player simples, bonito e completamente seu — sem algoritmos, sem anúncios, só música.</p>
+        <p class="profile-footer-bio">Desenvolvedor freelancer apaixonado por criar coisas úteis e bem feitas. O Local Music foi criado da vontade de ter um player simples, bonito e completamente seu sem algoritmos, sem anúncios, só música.</p>
         <div class="profile-footer-links">
           <a class="profile-footer-link" href="https://lguilherme-7.github.io/LocalMusic/" target="_blank" rel="noopener">Local Music</a>
           <a class="profile-footer-link" href="https://github.com/lguilherme-7" target="_blank" rel="noopener">GitHub</a>
@@ -419,9 +419,9 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
            Playlist 
         </button>
-        <button class="btn-go-artist" id="btn-go-artist" aria-label="Ver artista">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Ver artista
+        <button class="btn-go-artist" id="btn-go-artist" aria-label="Criar artista">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="4" x2="12" y2="10"/><line x1="9" y1="7" x2="15" y2="7"/></svg>
+          Criar artista
         </button>
       </div>
     </div>

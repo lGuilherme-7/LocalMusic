@@ -1,39 +1,23 @@
 /**
  * download.js
- * Integração com cobalt.tools API para download de músicas do YouTube em MP3.
- * Sem backend, sem chave de API, funciona direto no browser.
- * Endpoint: POST https://api.cobalt.tools/
+ * Tenta download direto via cobalt.tools API (gratuita, sem chave).
+ * Se a API recusar (400/401/CORS), copia a URL pro clipboard e abre
+ * cobalt.tools para o usuário baixar com um clique.
  */
 
 const Download = (() => {
 
-  const API_URL = 'https://api.cobalt.tools/';
+  const API_URL  = 'https://api.cobalt.tools/';
+  const SITE_URL = 'https://cobalt.tools/';
 
-  /** Callbacks de estado registrados por ui.js */
   const _statusCallbacks = [];
 
-  /**
-   * Registra callback para atualizações de estado do download.
-   * @param {Function} fn  Recebe { state: 'loading'|'success'|'error', message: string }
-   */
-  function onStatus(fn) {
-    _statusCallbacks.push(fn);
-  }
+  function onStatus(fn) { _statusCallbacks.push(fn); }
 
-  /**
-   * Notifica todos os callbacks de status.
-   * @param {'loading'|'success'|'error'} state
-   * @param {string} message
-   */
   function _emit(state, message) {
     for (const fn of _statusCallbacks) fn({ state, message });
   }
 
-  /**
-   * Valida se a string é uma URL do YouTube válida.
-   * @param {string} url
-   * @returns {boolean}
-   */
   function _isYouTubeURL(url) {
     try {
       const u = new URL(url);
@@ -48,12 +32,6 @@ const Download = (() => {
     }
   }
 
-  /**
-   * Dispara o download de um arquivo a partir de uma URL.
-   * Cria um <a download> temporário e simula o clique.
-   * @param {string} url
-   * @param {string} [filename]
-   */
   function _triggerDownload(url, filename = 'musica.mp3') {
     const a    = document.createElement('a');
     a.href     = url;
@@ -64,11 +42,16 @@ const Download = (() => {
     setTimeout(() => document.body.removeChild(a), 1000);
   }
 
-  /**
-   * Faz a requisição para a cobalt.tools API e inicia o download.
-   * @param {string} youtubeURL  URL do vídeo/música do YouTube
-   * @returns {Promise<void>}
-   */
+  async function _fallback(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      _emit('success', 'URL copiada! Abrindo cobalt.tools — cole e clique em Baixar.');
+    } catch {
+      _emit('success', 'Abrindo cobalt.tools — cole sua URL lá e clique em Baixar.');
+    }
+    window.open(SITE_URL, '_blank', 'noopener');
+  }
+
   async function downloadFromYouTube(youtubeURL) {
     const url = youtubeURL.trim();
 
@@ -89,38 +72,33 @@ const Download = (() => {
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept':       'application/json',
-          'X-API-Version': '1'
+          'Accept':       'application/json'
         },
         body: JSON.stringify({
           url,
-          downloadMode: 'audio',
-          audioFormat:  'mp3',
-          audioBitrate: '128',
+          downloadMode:  'audio',
+          audioFormat:   'mp3',
+          audioBitrate:  '128',
           filenameStyle: 'basic'
         })
       });
 
-      if (!response.ok) {
-        throw new Error(`Erro na API: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`${response.status}`);
 
       const data = await response.json();
 
-      // cobalt.tools retorna { status: "tunnel"|"redirect", url: "..." }
       if ((data.status === 'tunnel' || data.status === 'redirect') && data.url) {
         _triggerDownload(data.url, 'musica.mp3');
-        _emit('success', 'Download iniciado! Mova o arquivo MP3 para sua pasta de músicas.');
-      } else if (data.status === 'error') {
-        const msg = data.error?.code || 'erro desconhecido';
-        throw new Error(msg);
-      } else {
-        throw new Error('Resposta inesperada da API.');
+        _emit('success', 'Download iniciado! Mova o MP3 para sua pasta de músicas.');
+        return;
       }
 
-    } catch (err) {
-      const msg = err.message || 'Não foi possível baixar. Tente novamente.';
-      _emit('error', `Falha: ${msg}`);
+      if (data.status === 'error') throw new Error(data.error?.code || 'erro_api');
+
+      throw new Error('resposta_inesperada');
+
+    } catch {
+      await _fallback(url);
     }
   }
 

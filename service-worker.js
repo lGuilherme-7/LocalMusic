@@ -5,8 +5,8 @@
  * O app funciona offline após a primeira visita.
  */
 
-const CACHE_NAME    = 'LocalMusic-v1';
-const CACHE_VERSION = 1;
+const CACHE_NAME    = 'LocalMusic-v2';
+const CACHE_VERSION = 2;
 
 /** Assets estáticos que serão cacheados no install */
 const STATIC_ASSETS = [
