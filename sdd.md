@@ -87,7 +87,7 @@ A paleta de cores é o coração da identidade. Não copiar o visual de nenhum p
 ## Estrutura de arquivos
 
 ```
-/local-music/
+/LocalMusic/
 │
 ├── index.html
 ├── manifest.json
@@ -109,9 +109,6 @@ A paleta de cores é o coração da identidade. Não copiar o visual de nenhum p
 │   ├── storage.js
 │   └── ui.js
 │
-├── assets/
-│   ├── default-cover.svg
-│   └── logo.svg
 │
 └── icons/
     ├── icon.svg
@@ -316,7 +313,7 @@ Sem backend, sem chave de API, sem cadastro. Funciona direto no browser.
   "name": "Local Music",
   "short_name": "Local Music",
   "description": "Seu player de música pessoal",
-  "start_url": "/local-music/",
+  "start_url": "/LocalMusic/",
   "display": "standalone",
   "background_color": "#0F0F13",
   "theme_color": "#7C52F5",
@@ -336,7 +333,7 @@ Estratégia Cache First para assets estáticos (HTML, CSS, JS, ícones). As mús
 
 ## GitHub Pages — publicação
 
-O repositório deve ter a estrutura na raiz (não em subpasta). Configurar GitHub Pages para servir da branch `main`. O `start_url` no manifest deve apontar para `/` ou para o path do repositório (`/local-music/` se o repo se chamar `local-music`).
+O repositório deve ter a estrutura na raiz (não em subpasta). Configurar GitHub Pages para servir da branch `main`. O `start_url` no manifest deve apontar para `/` ou para o path do repositório (`/LocalMusic/` se o repo se chamar `LocalMusic`).
 
 Não são necessários arquivos de build, bundler ou dependências npm. O projeto roda direto como HTML/CSS/JS estático.
 

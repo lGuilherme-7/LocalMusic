@@ -1,9 +1,8 @@
 /**
  * app.js
  * Ponto de entrada do Local Music.
- * Inicializa o app, carrega estado do localStorage,
- * registra o service worker, conecta os módulos
- * e define o roteamento entre telas via navbar.
+ * Inicializa o app, carrega estado, registra service worker,
+ * conecta módulos e define roteamento via navbar.
  */
 
 import Storage   from './storage.js';
@@ -16,13 +15,8 @@ import Favorites from './favorites.js';
 import Download  from './download.js';
 import UI        from './ui.js';
 
-// ── Referências de DOM ────────────────────────────────────────
-
 const $ = id => document.getElementById(id);
 
-// ── Estado da aplicação ───────────────────────────────────────
-
-/** Ordenação atual da lista de músicas */
 let _sortMode = 'name';
 
 // ── Inicialização ─────────────────────────────────────────────
@@ -41,20 +35,21 @@ function init() {
   _bindLibraryUpdates();
   _registerServiceWorker();
 
-  // Estado inicial: sem biblioteca
   UI.setHomeState(false);
   UI.showScreen('home');
   _updateFavoritesCount();
+  _updateArtistsCount();
   _updateStats();
 }
 
 // ── Restauração de estado ─────────────────────────────────────
 
 function _restoreTheme() {
-  const light = Storage.get('lm_theme') === 'light';
-  if (light) document.documentElement.classList.add('light-mode');
+  // index.html usa data-theme="dark|light" no <html>, não classe light-mode
+  const theme = Storage.get('lm_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
   const toggle = $('toggle-theme');
-  if (toggle) toggle.checked = light;
+  if (toggle) toggle.checked = theme === 'light';
 }
 
 function _restoreProfile() {
@@ -75,6 +70,11 @@ function _bindNav() {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
       UI.showScreen(btn.dataset.screen);
+      if (btn.dataset.screen === 'playlists') {
+        _renderPlaylists();
+        _updateFavoritesCount();
+        _updateArtistsCount();
+      }
     });
   });
 }
@@ -85,9 +85,8 @@ function _bindHome() {
   $('btn-open-folder').addEventListener('click',       _openFolder);
   $('btn-open-folder-empty').addEventListener('click', _openFolder);
   $('btn-play-last').addEventListener('click',         _playLastTrack);
-
-  $('player-track-info').addEventListener('click', UI.openExpandedPlayer);
-  $('player-cover').addEventListener('click',      UI.openExpandedPlayer);
+  $('player-track-info').addEventListener('click',     UI.openExpandedPlayer);
+  $('player-cover').addEventListener('click',          UI.openExpandedPlayer);
 }
 
 async function _openFolder() {
@@ -99,7 +98,7 @@ async function _openFolder() {
 }
 
 function _playLastTrack() {
-  const id = Storage.get('lm_last_track');
+  const id    = Storage.get('lm_last_track');
   if (!id) return;
   const track = Library.getTrackById(id);
   if (track) _playTrack(track, Library.getTracks());
@@ -111,35 +110,27 @@ function _bindLibraryUpdates() {
   Library.onUpdate((tracks) => {
     const hasContent = tracks.length > 0;
     UI.setHomeState(hasContent);
-
     if (!hasContent) return;
 
-    // Última tocada
     const lastId    = Storage.get('lm_last_track');
     const lastTrack = lastId ? Library.getTrackById(lastId) : tracks[0];
     if (lastTrack) UI.renderLastTrack(lastTrack);
 
-    // Home
     UI.renderRecentTracks([...tracks].reverse(), (t) => _playTrack(t, tracks));
-    UI.renderHomeAlbums(Library.getAlbums(), _onAlbumClick);
+    UI.renderHomeAlbums(Library.getAlbums(),   _onAlbumClick);
     UI.renderHomeArtists(Library.getArtists(), _onArtistClick);
 
-    // Explorar
     _renderExploreTab(_sortMode);
-    UI.renderAlbumsGrid(Library.getAlbums(), _onAlbumClick);
+    UI.renderAlbumsGrid(Library.getAlbums(),   _onAlbumClick);
     UI.renderArtistsList(Library.getArtists(), _onArtistClick);
 
+    _updateArtistsCount();
     _updateStats();
   });
 }
 
 // ── Reprodução ────────────────────────────────────────────────
 
-/**
- * Carrega uma faixa na Queue e reproduz.
- * @param {object} track  faixa alvo
- * @param {object[]} context  lista de contexto para a fila
- */
 function _playTrack(track, context) {
   const idx = context.findIndex(t => t.id === track.id);
   Queue.set(context, idx >= 0 ? idx : 0);
@@ -149,50 +140,45 @@ function _playTrack(track, context) {
 // ── Player ────────────────────────────────────────────────────
 
 function _bindPlayer() {
-  // Barra compacta
-  $('btn-prev').addEventListener('click', Player.prev);
-  $('btn-next').addEventListener('click', Player.next);
+  $('btn-prev').addEventListener('click',       Player.prev);
+  $('btn-next').addEventListener('click',       Player.next);
   $('btn-play-pause').addEventListener('click', Player.togglePlayPause);
 
-  // Progresso compacto
   $('player-progress-bg').addEventListener('click', (e) => {
     const rect  = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    Player.seekRatio(ratio);
+    Player.seekRatio(Math.max(0, Math.min(1, ratio)));
   });
 
-  // Player expandido
   $('btn-collapse-player').addEventListener('click', UI.closeExpandedPlayer);
-  $('btn-prev-exp').addEventListener('click', Player.prev);
-  $('btn-next-exp').addEventListener('click', Player.next);
-  $('btn-play-pause-exp').addEventListener('click', Player.togglePlayPause);
+  $('btn-prev-exp').addEventListener('click',        Player.prev);
+  $('btn-next-exp').addEventListener('click',        Player.next);
+  $('btn-play-pause-exp').addEventListener('click',  Player.togglePlayPause);
 
-  // Progresso expandido
   $('expanded-progress-bg').addEventListener('click', (e) => {
     const rect  = e.currentTarget.getBoundingClientRect();
     const ratio = (e.clientX - rect.left) / rect.width;
-    Player.seekRatio(ratio);
+    Player.seekRatio(Math.max(0, Math.min(1, ratio)));
   });
 
-  // Volume
   $('volume-slider').addEventListener('input', (e) => {
-    Player.setVolume(Number(e.target.value));
+    const vol = Number(e.target.value);
+    Player.setVolume(vol);
+    Storage.set('lm_volume', vol);
   });
 
-  // Favorito
   $('btn-favorite').addEventListener('click', () => {
     const track = Player.getCurrentTrack();
     if (!track) return;
     Favorites.toggle(track.id);
     UI.toggleFavoriteIcon(track.id);
     _updateFavoritesCount();
-    const msg = Favorites.isFavorite(track.id)
-      ? 'Adicionado aos favoritos'
-      : 'Removido dos favoritos';
-    UI.showToast(msg, 'success');
+    UI.showToast(
+      Favorites.isFavorite(track.id) ? 'Adicionado aos favoritos' : 'Removido dos favoritos',
+      'success'
+    );
   });
 
-  // Shuffle
   const shuffleBtn = $('btn-shuffle');
   shuffleBtn.addEventListener('click', () => {
     const next = !Queue.isShuffled();
@@ -201,24 +187,39 @@ function _bindPlayer() {
     UI.showToast(next ? 'Aleatório ativado' : 'Aleatório desativado', 'info');
   });
 
-  // Repeat
   const repeatBtn = $('btn-repeat');
   repeatBtn.addEventListener('click', () => {
     const mode = Queue.cycleRepeat();
     UI.updateRepeatBtn(mode, repeatBtn);
   });
 
-  // Adicionar à playlist (do player expandido)
   $('btn-add-to-playlist').addEventListener('click', () => {
     const track = Player.getCurrentTrack();
     if (!track) return;
     _openAddToPlaylist(track.id);
   });
 
-  // Callbacks do player
+  $('btn-go-artist').addEventListener('click', () => {
+    const track = Player.getCurrentTrack();
+    if (!track) return;
+    UI.closeExpandedPlayer();
+    // Navega para a tela de playlists e abre o detalhe do artista
+    const artist = Library.getArtists().find(a => a.name === track.artist);
+    if (!artist) { UI.showToast('Artista não encontrado', 'error'); return; }
+    UI.showScreen('playlists');
+    const tracks = Library.getTracks().filter(t => t.artist === artist.name);
+    UI.openPlaylistDetail(
+      { id: `artist_${artist.name}`, name: artist.name },
+      tracks,
+      (t) => _playTrack(t, tracks),
+      null
+    );
+  });
+
   Player.onTrack((track) => {
     UI.updatePlayerTrack(track);
     UI.updatePlayState(true);
+    Storage.set('lm_last_track', track.id);
   });
 
   Player.onPlay(()  => UI.updatePlayState(true));
@@ -229,21 +230,16 @@ function _bindPlayer() {
 // ── Explorar ─────────────────────────────────────────────────
 
 function _bindExplore() {
-  // Tabs
   document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      UI.showTab(tab.dataset.tab);
-    });
+    tab.addEventListener('click', () => UI.showTab(tab.dataset.tab));
   });
 
-  // Busca
   const searchInput = $('search-input');
   const searchClear = $('search-clear');
 
   searchInput.addEventListener('input', () => {
     const q = searchInput.value.trim();
     searchClear.classList.toggle('hidden', !q);
-
     if (q) {
       const results = Search.filter(q);
       UI.renderSearchResults(results, (t) => _playTrack(t, results), true);
@@ -258,15 +254,14 @@ function _bindExplore() {
     UI.renderSearchResults([], null, false);
   });
 
-  // Ordenação
   $('sort-tracks').addEventListener('change', (e) => {
     _sortMode = e.target.value;
     _renderExploreTab(_sortMode);
   });
 
-  // Download
+  // Download — abre cobalt.tools com a URL preenchida em nova aba
   $('btn-download').addEventListener('click', () => {
-    const url = $('download-url').value;
+    const url = $('download-url').value.trim();
     Download.downloadFromYouTube(url);
   });
 
@@ -278,10 +273,6 @@ function _bindExplore() {
   });
 }
 
-/**
- * Renderiza a aba de músicas com o modo de ordenação aplicado.
- * @param {string} mode  'name'|'artist'|'album'|'duration'
- */
 function _renderExploreTab(mode) {
   const tracks = [...Library.getTracks()].sort((a, b) => {
     switch (mode) {
@@ -297,7 +288,6 @@ function _renderExploreTab(mode) {
 function _onAlbumClick(album) {
   const tracks = Library.getTracks().filter(t => t.album === album.name);
   if (!tracks.length) return;
-  _playTrack(tracks[0], tracks);
   UI.showScreen('explore');
   UI.showTab('tracks');
   UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks));
@@ -307,10 +297,13 @@ function _onAlbumClick(album) {
 function _onArtistClick(artist) {
   const tracks = Library.getTracks().filter(t => t.artist === artist.name);
   if (!tracks.length) return;
-  UI.showScreen('explore');
-  UI.showTab('tracks');
-  UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks));
-  UI.showToast(`Artista: ${artist.name}`, 'info');
+  UI.showScreen('playlists');
+  UI.openPlaylistDetail(
+    { id: `artist_${artist.name}`, name: artist.name },
+    tracks,
+    (t) => _playTrack(t, tracks),
+    null
+  );
 }
 
 // ── Playlists ─────────────────────────────────────────────────
@@ -323,7 +316,25 @@ function _bindPlaylists() {
     if (e.key === 'Enter' || e.key === ' ') _openFavoritesDetail();
   });
 
-  $('btn-back-playlist').addEventListener('click', UI.closePlaylistDetail);
+  // card-artists: presente no novo index.html
+  $('card-artists').addEventListener('click', _openArtistsDetail);
+  $('card-artists').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') _openArtistsDetail();
+  });
+
+  $('btn-back-playlist').addEventListener('click', () => {
+    UI.closePlaylistDetail();
+    const si = $('playlist-search-input');
+    if (si) si.value = '';
+  });
+
+  // playlist-search-input: presente no novo index.html
+  const playlistSearch = $('playlist-search-input');
+  if (playlistSearch) {
+    playlistSearch.addEventListener('input', () => {
+      UI.filterDetailTracks(playlistSearch.value);
+    });
+  }
 }
 
 function _renderPlaylists() {
@@ -348,7 +359,6 @@ function _openPlaylistDetail(playlist) {
     (t) => _playTrack(t, tracks),
     (plId, trackId) => {
       Playlists.removeTrack(plId, trackId);
-      // Re-abre o detalhe atualizado
       const updated = Playlists.getById(plId);
       if (updated) _openPlaylistDetail(updated);
       _renderPlaylists();
@@ -358,10 +368,7 @@ function _openPlaylistDetail(playlist) {
 
 function _openFavoritesDetail() {
   const favIds = Favorites.getAll();
-  const tracks = favIds
-    .map(id => Library.getTrackById(id))
-    .filter(Boolean);
-
+  const tracks = favIds.map(id => Library.getTrackById(id)).filter(Boolean);
   UI.openPlaylistDetail(
     { id: 'favorites', name: 'Favoritos' },
     tracks,
@@ -369,9 +376,13 @@ function _openFavoritesDetail() {
     (_, trackId) => {
       Favorites.remove(trackId);
       _updateFavoritesCount();
-      _openFavoritesDetail(); // re-abre atualizado
+      _openFavoritesDetail();
     }
   );
+}
+
+function _openArtistsDetail() {
+  UI.openArtistsDetail(Library.getArtists(), _onArtistClick);
 }
 
 function _openAddToPlaylist(trackId) {
@@ -387,17 +398,24 @@ function _updateFavoritesCount() {
   UI.updateFavoritesCount(Favorites.count());
 }
 
+// artists-count: presente no novo index.html
+function _updateArtistsCount() {
+  const el    = $('artists-count');
+  if (!el) return;
+  const count = Library.getArtists().length;
+  el.textContent = `${count} artista${count !== 1 ? 's' : ''}`;
+}
+
 // ── Perfil ────────────────────────────────────────────────────
 
 function _bindProfile() {
-  // Toggle de tema
   $('toggle-theme').addEventListener('change', (e) => {
-    const light = e.target.checked;
-    document.documentElement.classList.toggle('light-mode', light);
-    Storage.set('lm_theme', light ? 'light' : 'dark');
+    // Usa data-theme no <html>, não classe light-mode
+    const theme = e.target.checked ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    Storage.set('lm_theme', theme);
   });
 
-  // Nome editável
   const nameEl = $('profile-name');
   nameEl.addEventListener('blur', () => {
     const profile = Storage.get('lm_user_profile') || {};
@@ -406,14 +424,13 @@ function _bindProfile() {
     nameEl.textContent = profile.name;
   });
 
-  // Avatar
   $('avatar-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataURL = ev.target.result;
-      const profile = Storage.get('lm_user_profile') || {};
+      const dataURL  = ev.target.result;
+      const profile  = Storage.get('lm_user_profile') || {};
       profile.avatar = dataURL;
       Storage.set('lm_user_profile', profile);
       UI.renderAvatar(dataURL, profile.name);
@@ -421,10 +438,8 @@ function _bindProfile() {
     reader.readAsDataURL(file);
   });
 
-  // Trocar pasta
   $('btn-change-folder').addEventListener('click', _openFolder);
 
-  // Exportar playlists
   $('btn-export-playlists').addEventListener('click', () => {
     const json = Playlists.exportJSON();
     const blob = new Blob([json], { type: 'application/json' });
@@ -437,10 +452,7 @@ function _bindProfile() {
     UI.showToast('Playlists exportadas!', 'success');
   });
 
-  // Importar playlists
-  $('btn-import-playlists').addEventListener('click', () => {
-    $('import-input').click();
-  });
+  $('btn-import-playlists').addEventListener('click', () => $('import-input').click());
 
   $('import-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -453,7 +465,7 @@ function _bindProfile() {
         _updateStats();
         UI.showToast('Playlists importadas!', 'success');
       } else {
-        UI.showToast('Erro ao importar — arquivo inválido.', 'error');
+        UI.showToast('Arquivo inválido.', 'error');
       }
     };
     reader.readAsText(file);
@@ -461,11 +473,11 @@ function _bindProfile() {
 }
 
 function _updateStats() {
-  const libStats = Library.getStats();
+  const s = Library.getStats();
   UI.renderStats({
-    tracks:    libStats.tracks,
-    artists:   libStats.artists,
-    albums:    libStats.albums,
+    tracks:    s.tracks,
+    artists:   s.artists,
+    albums:    s.albums,
     playlists: Playlists.count()
   });
 }
@@ -473,7 +485,6 @@ function _updateStats() {
 // ── Modais ────────────────────────────────────────────────────
 
 function _bindModals() {
-  // Overlay fecha modal
   $('modal-overlay').addEventListener('click', (e) => {
     if (e.target === $('modal-overlay')) UI.closeModal();
   });
@@ -500,9 +511,7 @@ function _bindModals() {
 
 function _registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker
-      .register('./service-worker.js')
-      .catch(() => { /* Silencioso em dev */ });
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   }
 }
 

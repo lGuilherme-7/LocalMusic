@@ -89,13 +89,15 @@ const Download = (() => {
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept':       'application/json'
+          'Accept':       'application/json',
+          'X-API-Version': '1'
         },
         body: JSON.stringify({
           url,
           downloadMode: 'audio',
           audioFormat:  'mp3',
-          audioBitrate: '128'
+          audioBitrate: '128',
+          filenameStyle: 'basic'
         })
       });
 
