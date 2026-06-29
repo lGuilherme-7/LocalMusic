@@ -5,13 +5,14 @@
  * O app funciona offline após a primeira visita.
  */
 
-const CACHE_NAME    = 'LocalMusic-v2';
-const CACHE_VERSION = 2;
+const CACHE_NAME    = 'LocalMusic-v3';
+const CACHE_VERSION = 3;
 
 /** Assets estáticos que serão cacheados no install */
 const STATIC_ASSETS = [
   '/LocalMusic/',
   '/LocalMusic/index.html',
+  '/LocalMusic/welcome.html',
   '/LocalMusic/css/style.css',
   '/LocalMusic/js/app.js',
   '/LocalMusic/js/library.js',
@@ -21,11 +22,8 @@ const STATIC_ASSETS = [
   '/LocalMusic/js/search.js',
   '/LocalMusic/js/playlists.js',
   '/LocalMusic/js/favorites.js',
-  '/LocalMusic/js/download.js',
   '/LocalMusic/js/storage.js',
   '/LocalMusic/js/ui.js',
-  '/LocalMusic/assets/default-cover.svg',
-  '/LocalMusic/assets/logo.svg',
   '/LocalMusic/icons/icon.svg',
   '/LocalMusic/icons/icon-192.png',
   '/LocalMusic/icons/icon-512.png',

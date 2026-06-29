@@ -126,6 +126,16 @@ a { color: inherit; text-decoration: none; }
 
 /* === TRACK LIST === */
 .track-list { display: flex; flex-direction: column; }
+.empty-list-msg {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 48px 24px; text-align: center;
+  font-size: 14px; color: var(--text-muted); font-style: italic;
+  list-style: none;
+}
+.empty-list-msg::before {
+  content: '♪'; font-style: normal; font-size: 28px;
+  color: var(--accent-soft); opacity: 0.35;
+}
 .track-item { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background var(--transition); }
 .track-item:hover { background: var(--bg-card); }
 .track-item.playing { background: var(--bg-card); }
