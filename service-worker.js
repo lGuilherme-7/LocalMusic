@@ -5,8 +5,8 @@
  * O app funciona offline após a primeira visita.
  */
 
-const CACHE_NAME    = 'LocalMusic-v4';
-const CACHE_VERSION = 4;
+const CACHE_NAME    = 'LocalMusic-v5';
+const CACHE_VERSION = 5;
 
 /** Assets estáticos que serão cacheados no install */
 const STATIC_ASSETS = [
@@ -31,7 +31,15 @@ const STATIC_ASSETS = [
   '/LocalMusic/covers/fav-1.svg',
   '/LocalMusic/covers/fav-2.svg',
   '/LocalMusic/covers/fav-3.svg',
-  '/LocalMusic/covers/fav-4.svg'
+  '/LocalMusic/covers/fav-4.svg',
+  '/LocalMusic/covers/genres/sertanejo.svg',
+  '/LocalMusic/covers/genres/funk.svg',
+  '/LocalMusic/covers/genres/rap.svg',
+  '/LocalMusic/covers/genres/mpb.svg',
+  '/LocalMusic/covers/genres/rock.svg',
+  '/LocalMusic/covers/genres/pop.svg',
+  '/LocalMusic/covers/genres/eletronico.svg',
+  '/LocalMusic/covers/genres/gospel.svg'
 ];
 
 /** Domínios externos permitidos em cache (fontes e CDN) */

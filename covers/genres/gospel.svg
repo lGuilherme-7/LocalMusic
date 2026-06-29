@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD600"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+  <!-- 8 rays rotating around center (100,100) -->
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.88"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.78" transform="rotate(45 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.88" transform="rotate(90 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.78" transform="rotate(135 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.88" transform="rotate(180 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.78" transform="rotate(225 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.88" transform="rotate(270 100 100)"/>
+  <rect x="96" y="18" width="8" height="34" rx="4" fill="#fff" opacity="0.78" transform="rotate(315 100 100)"/>
+  <!-- Center circle -->
+  <circle cx="100" cy="100" r="28" fill="#fff" opacity="0.95"/>
+  <!-- Music note inside circle -->
+  <rect x="96" y="88" width="5" height="22" rx="2.5" fill="#E65100"/>
+  <ellipse cx="93" cy="110" rx="7" ry="5" fill="#E65100" transform="rotate(-15,93,110)"/>
+  <rect x="96" y="88" width="14" height="5" rx="2.5" fill="#E65100"/>
+  <ellipse cx="107" cy="97" rx="5" ry="4" fill="#E65100"/>
+  <!-- Genre label -->
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="rgba(0,0,0,0.30)"/>
+  <text x="100" y="184" text-anchor="middle" font-family="'DM Sans',Arial,sans-serif" font-size="20" font-weight="700" fill="#fff" letter-spacing="1">GOSPEL</text>
+</svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD600"/>
+      <stop offset="100%" stop-color="#FF6D00"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+  <!-- Lightning bolt -->
+  <polygon points="118,28 74,108 106,108 82,172 148,92 112,92 134,28" fill="#fff" opacity="0.96"/>
+  <!-- Glow inner -->
+  <polygon points="118,28 74,108 106,108 82,172 148,92 112,92 134,28" fill="#FFD600" opacity="0.22"/>
+  <!-- Genre label -->
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="rgba(0,0,0,0.32)"/>
+  <text x="100" y="184" text-anchor="middle" font-family="'DM Sans',Arial,sans-serif" font-size="22" font-weight="700" fill="#fff" letter-spacing="1">FUNK</text>
+</svg>

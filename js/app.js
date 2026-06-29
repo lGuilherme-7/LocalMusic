@@ -28,7 +28,6 @@ function init() {
   UI.setHomeState(false);
   UI.showScreen('home');
   _updateFavoritesCount();
-  _updateArtistsCount();
   _updateStats();
 }
 
@@ -88,7 +87,6 @@ function _bindNav() {
       if (btn.dataset.screen === 'playlists') {
         _renderPlaylists();
         _updateFavoritesCount();
-        _updateArtistsCount();
       }
     });
   });
@@ -139,7 +137,6 @@ function _bindLibraryUpdates() {
     UI.renderAlbumsGrid(Library.getAlbums(),   _onAlbumClick);
     UI.renderArtistsList(Library.getArtists(), _onArtistClick);
 
-    _updateArtistsCount();
     _updateStats();
     _renderPlaylists();
   });
@@ -318,11 +315,6 @@ function _bindPlaylists() {
     if (e.key === 'Enter' || e.key === ' ') _openFavoritesDetail();
   });
 
-  $('card-artists').addEventListener('click', _openArtistsDetail);
-  $('card-artists').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') _openArtistsDetail();
-  });
-
   $('btn-back-playlist').addEventListener('click', () => {
     UI.closePlaylistDetail();
     const si = $('playlist-search-input');
@@ -370,19 +362,8 @@ function _openFavoritesDetail() {
   );
 }
 
-function _openArtistsDetail() {
-  UI.openArtistsDetail(Library.getArtists(), _onArtistClick);
-}
-
 function _updateFavoritesCount() {
   UI.updateFavoritesCount(Favorites.count());
-}
-
-function _updateArtistsCount() {
-  const el    = $('artists-count');
-  if (!el) return;
-  const count = Library.getArtists().length;
-  el.textContent = `${count} artista${count !== 1 ? 's' : ''}`;
 }
 
 // ── Perfil ────────────────────────────────────────────────────

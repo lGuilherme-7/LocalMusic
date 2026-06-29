@@ -141,12 +141,12 @@
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </div>
             <h3 class="download-title">Baixar do YouTube</h3>
-            <p class="download-sub">Use o Y2mate para baixar músicas do YouTube em MP3 ou M4A. Depois, mova o arquivo para a sua pasta de músicas.</p>
-            <a class="btn-primary download-link" href="https://y2mate.com" target="_blank" rel="noopener">
+            <p class="download-sub">Use o Cobalt para converter vídeos do YouTube em MP3. É gratuito, sem anúncios e sem cadastro.</p>
+            <a class="btn-primary download-link" href="https://cobalt.tools" target="_blank" rel="noopener">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-              Ir para Y2mate
+              Abrir Cobalt
             </a>
-            <p class="download-hint">O Y2mate abre em uma nova aba. Baixe o áudio e mova para sua pasta de músicas para aparecer no app.</p>
+            <p class="download-hint">Cole o link do YouTube no Cobalt, escolha MP3 e baixe. Depois mova o arquivo para a sua pasta de músicas.</p>
           </div>
         </div>
       </div>
@@ -172,18 +172,6 @@
         <div class="playlist-info">
           <p class="playlist-name">Favoritos</p>
           <p class="playlist-count" id="favorites-count">0 músicas</p>
-        </div>
-        <svg class="playlist-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>
-
-      <!-- card de Artistas -->
-      <div class="playlist-card special" id="card-artists" role="button" tabindex="0" aria-label="Abrir artistas">
-        <div class="playlist-cover artists-cover">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </div>
-        <div class="playlist-info">
-          <p class="playlist-name">Artistas</p>
-          <p class="playlist-count" id="artists-count">0 artistas</p>
         </div>
         <svg class="playlist-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
@@ -437,17 +425,37 @@
         <div class="cover-option-default"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
         <span>Padrão</span>
       </button>
-      <button class="cover-option" data-cover="covers/fav-1.svg">
-        <img class="cover-option-img" src="covers/fav-1.svg" alt="Coração" />
-        <span>Coração</span>
+      <button class="cover-option" data-cover="covers/genres/sertanejo.svg">
+        <img class="cover-option-img" src="covers/genres/sertanejo.svg" alt="Sertanejo" />
+        <span>Sertanejo</span>
       </button>
-      <button class="cover-option" data-cover="covers/fav-2.svg">
-        <img class="cover-option-img" src="covers/fav-2.svg" alt="Vinil" />
-        <span>Vinil</span>
+      <button class="cover-option" data-cover="covers/genres/funk.svg">
+        <img class="cover-option-img" src="covers/genres/funk.svg" alt="Funk" />
+        <span>Funk</span>
       </button>
-      <button class="cover-option" data-cover="covers/fav-3.svg">
-        <img class="cover-option-img" src="covers/fav-3.svg" alt="Estrelas" />
-        <span>Estrelas</span>
+      <button class="cover-option" data-cover="covers/genres/rap.svg">
+        <img class="cover-option-img" src="covers/genres/rap.svg" alt="Rap" />
+        <span>Rap</span>
+      </button>
+      <button class="cover-option" data-cover="covers/genres/mpb.svg">
+        <img class="cover-option-img" src="covers/genres/mpb.svg" alt="MPB" />
+        <span>MPB</span>
+      </button>
+      <button class="cover-option" data-cover="covers/genres/rock.svg">
+        <img class="cover-option-img" src="covers/genres/rock.svg" alt="Rock" />
+        <span>Rock</span>
+      </button>
+      <button class="cover-option" data-cover="covers/genres/pop.svg">
+        <img class="cover-option-img" src="covers/genres/pop.svg" alt="Pop" />
+        <span>Pop</span>
+      </button>
+      <button class="cover-option" data-cover="covers/genres/eletronico.svg">
+        <img class="cover-option-img" src="covers/genres/eletronico.svg" alt="Eletrônico" />
+        <span>Eletrônico</span>
+      </button>
+      <button class="cover-option" data-cover="covers/genres/gospel.svg">
+        <img class="cover-option-img" src="covers/genres/gospel.svg" alt="Gospel" />
+        <span>Gospel</span>
       </button>
     </div>
     <div class="modal-actions">

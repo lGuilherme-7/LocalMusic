@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#00BCD4"/>
+      <stop offset="100%" stop-color="#00374A"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.55)"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+  <!-- Equalizer bars (7 bars, symmetric, tallest in center) -->
+  <rect x="14"  y="110" width="18" height="24"  rx="9" fill="url(#bar)"/>
+  <rect x="40"  y="86"  width="18" height="48"  rx="9" fill="url(#bar)"/>
+  <rect x="66"  y="58"  width="18" height="76"  rx="9" fill="url(#bar)"/>
+  <rect x="92"  y="32"  width="18" height="102" rx="9" fill="url(#bar)"/>
+  <rect x="118" y="62"  width="18" height="72"  rx="9" fill="url(#bar)"/>
+  <rect x="144" y="90"  width="18" height="44"  rx="9" fill="url(#bar)"/>
+  <rect x="170" y="108" width="18" height="26"  rx="9" fill="url(#bar)"/>
+  <!-- Genre label -->
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="rgba(0,0,0,0.38)"/>
+  <text x="100" y="184" text-anchor="middle" font-family="'DM Sans',Arial,sans-serif" font-size="17" font-weight="700" fill="#fff" letter-spacing="0.5">ELETRÔNICO</text>
+</svg>

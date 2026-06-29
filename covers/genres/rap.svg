@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A1A2E"/>
+      <stop offset="100%" stop-color="#4A1580"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+  <!-- Microphone capsule -->
+  <rect x="74" y="36" width="52" height="72" rx="26" fill="#fff" opacity="0.93"/>
+  <!-- Grille lines on capsule -->
+  <line x1="74" y1="64" x2="126" y2="64" stroke="#4A1580" stroke-width="2" opacity="0.3"/>
+  <line x1="74" y1="76" x2="126" y2="76" stroke="#4A1580" stroke-width="2" opacity="0.3"/>
+  <line x1="74" y1="88" x2="126" y2="88" stroke="#4A1580" stroke-width="2" opacity="0.3"/>
+  <!-- Handle -->
+  <rect x="90" y="108" width="20" height="40" rx="4" fill="#fff" opacity="0.88"/>
+  <!-- Arc (stand arm) -->
+  <path d="M70 122 Q100 138 130 122" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" opacity="0.55"/>
+  <!-- Base -->
+  <line x1="100" y1="148" x2="100" y2="162" stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+  <line x1="78" y1="162" x2="122" y2="162" stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+  <!-- Genre label -->
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="rgba(0,0,0,0.40)"/>
+  <text x="100" y="184" text-anchor="middle" font-family="'DM Sans',Arial,sans-serif" font-size="22" font-weight="700" fill="#fff" letter-spacing="1">RAP</text>
+</svg>

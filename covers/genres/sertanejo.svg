@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF9800"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="36" fill="url(#bg)"/>
+  <!-- Guitar body bottom -->
+  <ellipse cx="100" cy="138" rx="36" ry="40" fill="none" stroke="#fff" stroke-width="4.5" opacity="0.95"/>
+  <!-- Guitar body top -->
+  <ellipse cx="100" cy="100" rx="26" ry="28" fill="none" stroke="#fff" stroke-width="4.5" opacity="0.95"/>
+  <!-- Guitar neck -->
+  <rect x="97" y="42" width="6" height="42" rx="3" fill="#fff"/>
+  <!-- Headstock -->
+  <rect x="88" y="36" width="24" height="10" rx="5" fill="#fff"/>
+  <!-- Sound hole -->
+  <circle cx="100" cy="130" r="10" fill="none" stroke="#fff" stroke-width="2.5" opacity="0.7"/>
+  <!-- Bridge / strings hint -->
+  <line x1="84" y1="110" x2="116" y2="110" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <!-- Genre label band -->
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="rgba(0,0,0,0.35)"/>
+  <rect x="0" y="158" width="200" height="42" rx="0" fill="none"/>
+  <rect x="0" y="186" width="200" height="14" rx="0" fill="rgba(0,0,0,0.1)"/>
+  <text x="100" y="184" text-anchor="middle" font-family="'DM Sans',Arial,sans-serif" font-size="19" font-weight="700" fill="#fff" letter-spacing="0.5">SERTANEJO</text>
+</svg>
