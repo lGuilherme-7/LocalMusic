@@ -12,7 +12,6 @@ import Queue     from './queue.js';
 import Search    from './search.js';
 import Playlists from './playlists.js';
 import Favorites from './favorites.js';
-import Download  from './download.js';
 import UI        from './ui.js';
 
 const $ = id => document.getElementById(id);
@@ -129,6 +128,7 @@ function _bindLibraryUpdates() {
 
     _updateArtistsCount();
     _updateStats();
+    _renderPlaylists();
   });
 }
 
@@ -219,7 +219,7 @@ function _bindPlayer() {
   $('btn-add-to-playlist').addEventListener('click', () => {
     const track = Player.getCurrentTrack();
     if (!track) return;
-    _openAddToPlaylist(track.id);
+    _openAddToPlaylist(track);
   });
 
   $('btn-go-artist').addEventListener('click', () => {
@@ -287,9 +287,9 @@ function _bindExplore() {
     searchClear.classList.toggle('hidden', !q);
     if (q) {
       const results = Search.filter(q);
-      UI.renderSearchResults(results, (t) => _playTrack(t, results), true);
+      UI.renderSearchResults(results, (t) => _playTrack(t, results), true, _openAddToPlaylist);
     } else {
-      UI.renderSearchResults([], null, false);
+      UI.renderSearchResults([], null, false, null);
     }
   });
 
@@ -303,19 +303,6 @@ function _bindExplore() {
     _sortMode = e.target.value;
     _renderExploreTab(_sortMode);
   });
-
-  // Download — abre cobalt.tools com a URL preenchida em nova aba
-  $('btn-download').addEventListener('click', () => {
-    const url = $('download-url').value.trim();
-    Download.downloadFromYouTube(url);
-  });
-
-  Download.onStatus((status) => {
-    UI.updateDownloadStatus(status);
-    if (status.state !== 'loading') {
-      UI.showToast(status.message, status.state === 'success' ? 'success' : 'error');
-    }
-  });
 }
 
 function _renderExploreTab(mode) {
@@ -327,7 +314,7 @@ function _renderExploreTab(mode) {
       default:         return a.title.localeCompare(b.title);
     }
   });
-  UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks));
+  UI.renderAllTracks(tracks, (t) => _playTrack(t, tracks), _openAddToPlaylist);
 }
 
 function _onAlbumClick(album) {
@@ -430,13 +417,33 @@ function _openArtistsDetail() {
   UI.openArtistsDetail(Library.getArtists(), _onArtistClick);
 }
 
-function _openAddToPlaylist(trackId) {
+function _openAddToPlaylist(track) {
   const playlists = Playlists.getAll();
-  UI.openAddToPlaylistModal(playlists, (playlistId) => {
-    Playlists.addTrack(playlistId, trackId);
-    _renderPlaylists();
-    UI.showToast('Adicionado à playlist!', 'success');
-  });
+  UI.openAddToPlaylistModal(
+    track,
+    playlists,
+    (playlistId) => {
+      Playlists.addTrack(playlistId, track.id);
+      _renderPlaylists();
+      UI.showToast('Adicionado à playlist!', 'success');
+    },
+    () => {
+      const name    = track.artist || 'Artista desconhecido';
+      let   pl      = Playlists.getAll().find(p => p.name === name);
+      let   created = false;
+      if (!pl) { pl = Playlists.create(name); created = true; }
+      const wasNew  = !pl.tracks.includes(track.id);
+      Playlists.addTrack(pl.id, track.id);
+      _renderPlaylists();
+      _updateStats();
+      UI.showToast(
+        created     ? `Artista "${name}" criado!` :
+        wasNew      ? `Adicionado ao artista "${name}"!` :
+                      `Já está no artista "${name}"`,
+        created || wasNew ? 'success' : 'info'
+      );
+    }
+  );
 }
 
 function _updateFavoritesCount() {

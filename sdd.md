@@ -107,6 +107,7 @@ A paleta de cores é o coração da identidade. Não copiar o visual de nenhum p
 │   ├── favorites.js
 │   ├── download.js
 │   ├── storage.js
+│   ├── worker.js
 │   └── ui.js
 │
 │

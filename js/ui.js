@@ -92,7 +92,7 @@ const UI = (() => {
 
   // ── Item de faixa genérico ───────────────────────────────────
 
-  function _trackItem(track, onClick, showRemove = false, onRemove = null) {
+  function _trackItem(track, onClick, showRemove = false, onRemove = null, onAction = null) {
     const li = document.createElement('li');
     li.className  = 'track-item';
     li.dataset.id = track.id;
@@ -123,6 +123,16 @@ const UI = (() => {
       btn.title     = 'Remover da playlist';
       btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
       btn.addEventListener('click', (e) => { e.stopPropagation(); onRemove(track.id); });
+      li.appendChild(btn);
+    }
+
+    if (onAction) {
+      const btn = document.createElement('button');
+      btn.className   = 'track-item-action';
+      btn.title       = 'Adicionar à playlist ou artista';
+      btn.setAttribute('aria-label', 'Mais opções');
+      btn.innerHTML   = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>`;
+      btn.addEventListener('click', (e) => { e.stopPropagation(); onAction(track); });
       li.appendChild(btn);
     }
 
@@ -201,13 +211,13 @@ const UI = (() => {
 
   // ── Explorar ─────────────────────────────────────────────────
 
-  function renderAllTracks(tracks, onClick) {
+  function renderAllTracks(tracks, onClick, onAction) {
     allTracksList.innerHTML = '';
     if (!tracks.length) {
       allTracksList.innerHTML = '<li class="empty-list-msg">Nenhuma música encontrada.</li>';
       return;
     }
-    tracks.forEach(t => allTracksList.appendChild(_trackItem(t, onClick)));
+    tracks.forEach(t => allTracksList.appendChild(_trackItem(t, onClick, false, null, onAction)));
   }
 
   function renderAlbumsGrid(albums, onClick) {
@@ -245,7 +255,7 @@ const UI = (() => {
     });
   }
 
-  function renderSearchResults(tracks, onClick, visible) {
+  function renderSearchResults(tracks, onClick, visible, onAction) {
     searchResults.classList.toggle('hidden', !visible);
     exploreTabsWrap.classList.toggle('hidden', visible);
     searchList.innerHTML = '';
@@ -253,7 +263,7 @@ const UI = (() => {
       searchList.innerHTML = '<li class="empty-list-msg">Nenhum resultado.</li>';
       return;
     }
-    tracks.forEach(t => searchList.appendChild(_trackItem(t, onClick)));
+    tracks.forEach(t => searchList.appendChild(_trackItem(t, onClick, false, null, onAction)));
   }
 
   // ── Helper artista ────────────────────────────────────────────
@@ -520,7 +530,7 @@ const UI = (() => {
     $('modal-add-playlist').classList.add('hidden');
   }
 
-  function openAddToPlaylistModal(playlists, onSelect) {
+  function openAddToPlaylistModal(track, playlists, onSelect, onAddToArtist) {
     modalOverlay.classList.remove('hidden');
     $('modal-new-playlist').classList.add('hidden');
     $('modal-add-playlist').classList.remove('hidden');
@@ -528,8 +538,29 @@ const UI = (() => {
     const list = $('modal-playlists-list');
     list.innerHTML = '';
 
+    if (onAddToArtist && track.artist && track.artist !== 'Artista desconhecido') {
+      const sep = document.createElement('li');
+      sep.className   = 'modal-list-section';
+      sep.textContent = 'Artista';
+      list.appendChild(sep);
+
+      const artistLi = document.createElement('li');
+      artistLi.className = 'modal-list-item modal-list-item--artist';
+      artistLi.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${track.artist}`;
+      artistLi.addEventListener('click', () => { onAddToArtist(); closeModal(); });
+      list.appendChild(artistLi);
+
+      const sep2 = document.createElement('li');
+      sep2.className   = 'modal-list-section';
+      sep2.textContent = 'Playlist';
+      list.appendChild(sep2);
+    }
+
     if (!playlists.length) {
-      list.innerHTML = '<li class="empty-list-msg">Nenhuma playlist criada.</li>';
+      const empty = document.createElement('li');
+      empty.className   = 'empty-list-msg';
+      empty.textContent = 'Nenhuma playlist criada.';
+      list.appendChild(empty);
       return;
     }
     playlists.forEach(pl => {
@@ -581,16 +612,6 @@ const UI = (() => {
     });
   }
 
-  // ── Download ──────────────────────────────────────────────────
-
-  function updateDownloadStatus({ state, message }) {
-    const el = $('download-status');
-    if (!el) return;
-    el.textContent = message;
-    el.className   = `download-status download-status--${state}`;
-    el.classList.remove('hidden');
-  }
-
   // ── API pública ───────────────────────────────────────────────
 
   return {
@@ -612,7 +633,7 @@ const UI = (() => {
     // Modais
     openNewPlaylistModal, closeModal, openAddToPlaylistModal,
     // Utilitários
-    showToast, showScreen, showTab, updateDownloadStatus
+    showToast, showScreen, showTab
   };
 
 })();
