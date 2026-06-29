@@ -1,6 +1,6 @@
 /**
  * ui.js
- * Único módulo com acesso direto ao DOM.
+ * Único módulo com acesso direto ao DOM. 
  * Renderiza listas, cards, modais, toasts e atualiza o player.
  */
 
