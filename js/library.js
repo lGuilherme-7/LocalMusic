@@ -3,7 +3,7 @@ import Storage  from './storage.js';
 
 const Library = (() => {
 
-  const ACCEPTED_FORMATS = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'];
+  const ACCEPTED_FORMATS = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'opus'];
 
   let _tracks    = [];
   let _folderMap = new Map(); // folderName -> trackId[]
