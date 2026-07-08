@@ -84,7 +84,12 @@ const Metadata = (() => {
    */
   function getDuration(file) {
     return new Promise((resolve) => {
-      const url   = URL.createObjectURL(file);
+      // No Windows, .opus costuma chegar com file.type vazio, o que
+      // impede o <audio> de decodificar via blob URL.
+      const playable = (!file.type && file.name.toLowerCase().endsWith('.opus'))
+        ? new Blob([file], { type: 'audio/ogg; codecs=opus' })
+        : file;
+      const url   = URL.createObjectURL(playable);
       const audio = new Audio();
       audio.preload = 'metadata';
       audio.onloadedmetadata = () => {

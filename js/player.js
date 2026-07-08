@@ -52,6 +52,21 @@ const Player = (() => {
   }
 
   /**
+   * Alguns navegadores (principalmente no Windows) não reconhecem o MIME
+   * type de arquivos .opus e entregam o File com .type vazio, o que faz o
+   * <audio> falhar ao decodificar. Força o tipo correto nesse caso.
+   * @param {File} file
+   * @returns {Blob}
+   */
+  function _playableFile(file) {
+    if (file.type) return file;
+    if (file.name.toLowerCase().endsWith('.opus')) {
+      return new Blob([file], { type: 'audio/ogg; codecs=opus' });
+    }
+    return file;
+  }
+
+  /**
    * Carrega e reproduz uma faixa.
    * @param {object} track  objeto do Library com .file e metadados
    */
@@ -64,7 +79,7 @@ const Player = (() => {
     }
 
     _currentTrack = track;
-    _audio.src    = URL.createObjectURL(track.file);
+    _audio.src    = URL.createObjectURL(_playableFile(track.file));
     _audio.load();
 
     Storage.set('lm_last_track', track.id);
