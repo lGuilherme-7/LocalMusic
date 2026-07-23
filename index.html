@@ -331,27 +331,44 @@
     </div>
   </div>
 
-  <!-- ===================== PLAYER EXPANDIDO ===================== -->
+ <!-- ===================== PLAYER EXPANDIDO ===================== -->
   <div id="player-expanded" class="player-expanded hidden" role="dialog" aria-modal="true" aria-label="Player expandido">
     <button class="btn-collapse" id="btn-collapse-player" aria-label="Fechar player expandido">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
+
     <div class="expanded-cover-wrap">
       <div class="expanded-cover" id="expanded-cover">
         <div class="default-cover large">♪</div>
       </div>
     </div>
+
+    <!-- Painel de letra sincronizada (irmã de .expanded-cover-wrap) -->
+    <div class="lyrics-panel hidden" id="lyrics-panel">
+      <div class="lyrics-scroll" id="lyrics-scroll">
+        <!-- linhas inseridas dinamicamente pelo JS -->
+      </div>
+      <p class="lyrics-empty hidden" id="lyrics-empty">Letra não disponível para esta música.</p>
+    </div>
+
     <div class="expanded-info">
       <div class="expanded-track">
         <div>
           <p class="expanded-name" id="expanded-name">—</p>
           <p class="expanded-artist" id="expanded-artist">—</p>
         </div>
+
+        <!-- Botão para alternar entre capa e letra -->
+        <button class="lyrics-toggle-btn hidden" id="btn-toggle-lyrics" aria-label="Mostrar letra">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </button>
+
         <button class="favorite-btn" id="btn-favorite" aria-label="Favoritar música">
           <svg id="icon-heart-empty" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           <svg id="icon-heart-full" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" class="hidden"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
         </button>
       </div>
+
       <div class="expanded-progress-wrap">
         <div class="expanded-progress-bg" id="expanded-progress-bg" role="slider" aria-label="Posição da música" tabindex="0">
           <div class="expanded-progress-fill" id="expanded-progress-fill"></div>
@@ -361,6 +378,7 @@
           <span id="expanded-duration">0:00</span>
         </div>
       </div>
+
       <div class="expanded-controls">
         <button class="ctrl-btn mode-btn" id="btn-shuffle" aria-label="Modo aleatório">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
@@ -379,11 +397,13 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
         </button>
       </div>
+
       <div class="volume-row">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>
         <input type="range" id="volume-slider" class="volume-slider" min="0" max="100" value="80" aria-label="Volume" />
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
       </div>
+
       <div class="expanded-actions">
         <button class="btn-go-artist" id="btn-go-artist" aria-label="Ver artista" style="grid-column:1/-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>

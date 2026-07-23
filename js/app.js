@@ -208,6 +208,10 @@ function _bindPlayer() {
     );
   });
 
+  $('btn-toggle-lyrics').addEventListener('click', () => {
+    UI.toggleLyricsView();
+  });
+
   const shuffleBtn = $('btn-shuffle');
   shuffleBtn.addEventListener('click', () => {
     const next = !Queue.isShuffled();

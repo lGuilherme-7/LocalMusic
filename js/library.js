@@ -7,6 +7,7 @@ const Library = (() => {
 
   let _tracks    = [];
   let _folderMap = new Map(); // folderName -> trackId[]
+  let _lyricsMap = new Map(); // nomeBaseSemExtensao -> File (.srt)
   const _listeners = [];
 
   function onUpdate(fn) { _listeners.push(fn); }
@@ -17,7 +18,36 @@ const Library = (() => {
     return ACCEPTED_FORMATS.includes(ext);
   }
 
+  function _isSrt(name) {
+    return name.toLowerCase().endsWith('.srt');
+  }
+
+  function _baseName(name) {
+    return name.replace(/\.[^.]+$/, '');
+  }
+
+  /**
+   * Normaliza um nome de arquivo (sem extensão) para permitir comparação
+   * tolerante entre o MP3 e o .srt correspondente. Isso é necessário
+   * porque o pytubefix sanitiza nomes de forma diferente para áudio e
+   * legenda, e ainda adiciona sufixos de código de idioma ao final do
+   * nome do .srt (ex: "_en-US_", "_a_en_", "_pt_"). Remove acentos,
+   * pontuação e esses sufixos, deixando só letras/números para comparar.
+   */
+  function _normalizarParaComparacao(nome) {
+  return nome
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Remove sufixo de idioma só quando estiver isolado entre parênteses
+    // ("(en-US)", "(pt)") ou após separador explícito ("_pt", "_a_en_") —
+    // nunca as duas últimas letras de uma palavra comum (ex: "VERSION").
+    .replace(/\s*\(a?[_-]?[a-z]{2}(-[a-z]{2})?\)\s*$/i, '')
+    .replace(/[_\s]+(a[_-])?[a-z]{2}(-[a-z]{2})?[_\s]*$/i, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
   function _baseTrack(file) {
+    const chaveNormalizada = _normalizarParaComparacao(_baseName(file.name));
     return {
       id:       file.name,
       file,
@@ -25,26 +55,36 @@ const Library = (() => {
       artist:   'Artista desconhecido',
       album:    'Álbum desconhecido',
       cover:    null,
-      duration: 0
+      duration: 0,
+      lyricsFile: _lyricsMap.get(chaveNormalizada) || null
     };
   }
 
-  // Coleta arquivos recursivamente, registrando a pasta de primeiro nível
+  // Coleta arquivos recursivamente, registrando a pasta de primeiro nível.
+  // Também coleta arquivos .srt à parte, para associar às faixas depois.
   async function _collectWithFolders(dirHandle, topFolder = null) {
     const results = [];
+    const srts     = [];
     for await (const entry of dirHandle.values()) {
       if (entry.kind === 'file' && _isAudio(entry.name)) {
         const file = await entry.getFile();
         results.push({ file, folder: topFolder });
+      } else if (entry.kind === 'file' && _isSrt(entry.name)) {
+        const file = await entry.getFile();
+        srts.push(file);
       } else if (entry.kind === 'directory') {
         const sub = await _collectWithFolders(entry, topFolder ?? entry.name);
         results.push(...sub);
       }
     }
+    for (const srt of srts) {
+      _lyricsMap.set(_normalizarParaComparacao(_baseName(srt.name)), srt);
+    }
     return results;
   }
 
   async function _openWithPicker() {
+    _lyricsMap = new Map();
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     return _collectWithFolders(dirHandle);
   }
@@ -55,11 +95,21 @@ const Library = (() => {
       input.type  = 'file';
       input.multiple = true;
       input.setAttribute('webkitdirectory', '');
-      input.accept = ACCEPTED_FORMATS.map(e => `.${e}`).join(',');
+      // Aceita os formatos de áudio E .srt no seletor de pasta
+      input.accept = [...ACCEPTED_FORMATS.map(e => `.${e}`), '.srt'].join(',');
       input.style.display = 'none';
 
       input.onchange = () => {
-        const results = Array.from(input.files || [])
+        _lyricsMap = new Map();
+        const todosArquivos = Array.from(input.files || []);
+
+        // Primeiro indexa todos os .srt encontrados
+        todosArquivos
+          .filter(f => _isSrt(f.name))
+          .forEach(f => _lyricsMap.set(_normalizarParaComparacao(_baseName(f.name)), f));
+
+        // Depois monta a lista de faixas de áudio
+        const results = todosArquivos
           .filter(f => _isAudio(f.name))
           .map(f => {
             const parts  = f.webkitRelativePath ? f.webkitRelativePath.split('/') : [];

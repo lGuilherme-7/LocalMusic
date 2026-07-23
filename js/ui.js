@@ -6,32 +6,13 @@
 
 import Player    from './player.js';
 import Favorites from './favorites.js';
+import Lyrics    from './lyrics.js';
 
 const UI = (() => {
 
   const $ = id => document.getElementById(id);
 
   // ── Referências DOM ───────────────────────────────────────────
-
-  const playerBar          = $('player-bar');
-  const playerName         = $('player-name');
-  const playerArtist       = $('player-artist');
-  const playerCover        = $('player-cover');
-  const playerProgressFill = $('player-progress-fill');
-  const iconPlay           = $('icon-play');
-  const iconPause          = $('icon-pause');
-
-  const playerExpanded     = $('player-expanded');
-  const expandedName       = $('expanded-name');
-  const expandedArtist     = $('expanded-artist');
-  const expandedCover      = $('expanded-cover');
-  const expandedCurrent    = $('expanded-current');
-  const expandedDuration   = $('expanded-duration');
-  const expandedFill       = $('expanded-progress-fill');
-  const iconPlayExp        = $('icon-play-exp');
-  const iconPauseExp       = $('icon-pause-exp');
-  const iconHeartEmpty     = $('icon-heart-empty');
-  const iconHeartFull      = $('icon-heart-full');
 
   const homeEmpty          = $('home-empty');
   const homeContent        = $('home-content');
@@ -67,10 +48,105 @@ const UI = (() => {
   const toast              = $('toast');
   const modalOverlay       = $('modal-overlay');
 
+  const playerBar          = $('player-bar');
+  const playerName         = $('player-name');
+  const playerArtist       = $('player-artist');
+  const playerCover        = $('player-cover');
+  const playerProgressFill = $('player-progress-fill');
+  const iconPlay           = $('icon-play');
+  const iconPause          = $('icon-pause');
+
+  const playerExpanded     = $('player-expanded');
+  const expandedName       = $('expanded-name');
+  const expandedArtist     = $('expanded-artist');
+  const expandedCover      = $('expanded-cover');
+  const expandedCurrent    = $('expanded-current');
+  const expandedDuration   = $('expanded-duration');
+  const expandedFill       = $('expanded-progress-fill');
+  const iconPlayExp        = $('icon-play-exp');
+  const iconPauseExp       = $('icon-pause-exp');
+  const iconHeartEmpty     = $('icon-heart-empty');
+  const iconHeartFull      = $('icon-heart-full');
+
+  const lyricsToggleBtn    = $('btn-toggle-lyrics');
+  const lyricsPanel        = $('lyrics-panel');
+  const lyricsScroll       = $('lyrics-scroll');
+  const lyricsEmpty        = $('lyrics-empty');
+
   let _toastTimer  = null;
   let _detailTracks  = [];
   let _detailOnClick = null;
   let _detailOnRemove = null;
+
+  let _lyricsLinhas       = [];
+  let _lyricsIndiceAtual  = -1;
+  let _lyricsVisivel      = false;
+
+  // ── Letra sincronizada ───────────────────────────────────────
+
+  async function loadLyricsForTrack(track) {
+    _lyricsLinhas      = [];
+    _lyricsIndiceAtual = -1;
+    lyricsScroll.innerHTML = '';
+    // O botão de letra fica sempre visível (mesmo sem .srt), para o usuário
+    // conseguir abrir o painel e ver a mensagem de "não disponível" — em vez
+    // de simplesmente sumir, o que pode parecer um bug.
+    lyricsToggleBtn.classList.remove('hidden');
+    const temLetra = track && track.lyricsFile;
+    if (!temLetra) {
+      lyricsEmpty.textContent = 'Letra não disponível para esta música.';
+      lyricsEmpty.classList.remove('hidden');
+      lyricsScroll.classList.add('hidden');
+      return;
+    }
+    _lyricsLinhas = await Lyrics.load(track.lyricsFile);
+    if (!_lyricsLinhas.length) {
+      lyricsEmpty.textContent = 'Letra não disponível para esta música.';
+      lyricsEmpty.classList.remove('hidden');
+      lyricsScroll.classList.add('hidden');
+      return;
+    }
+    lyricsEmpty.classList.add('hidden');
+    lyricsScroll.classList.remove('hidden');
+    _lyricsLinhas.forEach((linha, i) => {
+      const p = document.createElement('p');
+      p.className   = 'lyrics-line';
+      p.textContent = linha.texto;
+      p.dataset.index = i;
+      // Permite tocar numa linha para pular direto para aquele trecho
+      p.addEventListener('click', () => {
+        Player.seek(linha.inicio);
+      });
+      lyricsScroll.appendChild(p);
+    });
+  }
+
+  function updateLyricsTime(tempoAtual) {
+    if (!_lyricsLinhas.length) return;
+    const novoIndice = Lyrics.indiceAtual(_lyricsLinhas, tempoAtual);
+    if (novoIndice === _lyricsIndiceAtual) return;
+    _lyricsIndiceAtual = novoIndice;
+    const linhasEl = lyricsScroll.querySelectorAll('.lyrics-line');
+    linhasEl.forEach((el, i) => {
+      el.classList.toggle('active', i === novoIndice);
+      el.classList.toggle('past',   i < novoIndice);
+    });
+    const linhaAtivaEl = linhasEl[novoIndice];
+    if (linhaAtivaEl && _lyricsVisivel) {
+      linhaAtivaEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  function toggleLyricsView(forcarEstado) {
+    _lyricsVisivel = typeof forcarEstado === 'boolean' ? forcarEstado : !_lyricsVisivel;
+    lyricsPanel.classList.toggle('hidden', !_lyricsVisivel);
+    expandedCover?.parentElement?.classList.toggle('hidden', _lyricsVisivel);
+    lyricsToggleBtn.classList.toggle('active', _lyricsVisivel);
+    if (_lyricsVisivel && _lyricsIndiceAtual >= 0) {
+      const linhasEl = lyricsScroll.querySelectorAll('.lyrics-line');
+      linhasEl[_lyricsIndiceAtual]?.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }
+  }
 
   // ── Helpers ──────────────────────────────────────────────────
 
@@ -277,7 +353,6 @@ const UI = (() => {
     avatar.textContent = artist.name.charAt(0).toUpperCase();
 
     const info = document.createElement('div');
-    // reutiliza classes do CSS
     const name = document.createElement('p');
     name.className   = 'artist-name';
     name.textContent = artist.name;
@@ -363,7 +438,6 @@ const UI = (() => {
     detailPlaylistName.textContent = playlist.name;
     _renderDetailList(tracks, onTrackClick, onRemoveTrack);
 
-    // Limpa busca interna ao abrir
     const si = $('playlist-search-input');
     if (si) si.value = '';
 
@@ -388,7 +462,6 @@ const UI = (() => {
     });
   }
 
-  // Filtra faixas do detalhe em tempo real (playlist-search-input)
   function filterDetailTracks(query) {
     const term = query.trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -407,7 +480,6 @@ const UI = (() => {
     _detailTracks = [];
   }
 
-  // Tela de artistas dentro do detalhe de playlists (card-artists)
   function openArtistsDetail(artists, onArtistClick) {
     detailPlaylistName.textContent = 'Artistas';
     detailTracksList.innerHTML     = '';
@@ -469,6 +541,7 @@ const UI = (() => {
     expandedCover.innerHTML    = '';
     expandedCover.appendChild(_coverEl(track.cover));
     _updateFavoriteIcon(track.id);
+    loadLyricsForTrack(track);
   }
 
   function updatePlayState(playing) {
@@ -484,6 +557,7 @@ const UI = (() => {
     expandedFill.style.width       = pct;
     expandedCurrent.textContent    = Player.formatTime(time.current);
     expandedDuration.textContent   = Player.formatTime(time.duration);
+    updateLyricsTime(time.current);
   }
 
   function _updateFavoriteIcon(trackId) {
@@ -579,7 +653,6 @@ const UI = (() => {
   function showToast(message, type = 'info', duration = 2800) {
     if (_toastTimer) clearTimeout(_toastTimer);
     toast.textContent = message;
-    // Usa classes BEM: toast--success, toast--error, toast--info
     toast.className   = `toast toast--${type}`;
     toast.classList.remove('hidden');
     _toastTimer = setTimeout(() => toast.classList.add('hidden'), duration);
@@ -632,6 +705,7 @@ const UI = (() => {
     updatePlayerTrack, updatePlayState, updateProgress,
     toggleFavoriteIcon, openExpandedPlayer, closeExpandedPlayer,
     updateShuffleBtn, updateRepeatBtn,
+    loadLyricsForTrack, updateLyricsTime, toggleLyricsView,
     // Modais
     openNewPlaylistModal, closeModal, openAddToPlaylistModal,
     // Utilitários
