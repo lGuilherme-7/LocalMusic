@@ -1,0 +1,370 @@
+LOCALMUSIC
+
+ESPECIFICAÇÕES TÉCNICAS — CONTRATO DE INTEGRAÇÃO
+Download Free (Python) <-> Local Music (HTML/CSS/JavaScript PWA)
+
+Status: proposta de contrato baseada na inspeção do repositório Local Music em
+2026-10-04. Codificação: UTF-8. Protocolo proposto: 1.1.0.
+
+1. ESCOPO, EVIDÊNCIAS E LIMITES
+
+Este documento não implementa recursos, não altera o comportamento de nenhum
+projeto e não exige servidor próprio. Ele define um contrato local de exportação
+que poderá ser adotado futuramente.
+
+Foi identificado neste repositório somente o projeto Local Music. Não há código,
+configuração, dependências ou diretório do Download Free disponíveis para
+inspeção. Assim:
+
+- IDENTIFICADO = comportamento comprovado no código atual do Local Music.
+- PROPOSTO = contrato que o Download Free poderá produzir e uma evolução futura
+  do Local Music poderá consumir.
+- Nada marcado como PROPOSTO deve ser considerado uma funcionalidade já
+  existente no Download Free ou já suportada pelo Local Music.
+
+2. ARQUITETURA ATUAL IDENTIFICADA — LOCAL MUSIC
+
+O Local Music é uma PWA estática, sem backend, sem build e sem dependências
+instaladas. Usa HTML, CSS e módulos ES JavaScript. Reproduz arquivos escolhidos
+localmente por HTMLAudioElement. Deve ser servido por HTTP(S); file:// não é
+modo suportado.
+
+Módulos identificados:
+
+- index.html: estrutura da interface, elemento audio e carregamento de módulos;
+  carrega jsmediatags 3.9.5 por CDN.
+- js/app.js: integra módulos, renderiza telas, liga eventos, mostra player e
+  letras.
+- js/library.js: abre pasta, varre áudio/track.json/.srt/imagens, normaliza
+  faixas e enriquece metadados.
+- js/metadata.js: lê tags e capa incorporada por jsmediatags e mede duração.
+- js/player.js: play/pause, seek, volume, eventos de tempo e troca de faixa.
+- js/queue.js: fila, anterior/próxima, shuffle e repetição.
+- js/lyrics.js: letra JSON ou SRT e cálculo da linha ativa.
+- js/favorites.js e js/playlists.js: favoritos/playlists persistidos por ID.
+- js/storage.js: adaptador único de localStorage.
+- js/search.js: busca por título, artista e álbum.
+- manifest.json e service-worker.js: PWA/cache dos assets; áudio não é cacheado.
+
+Fluxo atual:
+Usuário escolhe pasta -> Library coleta File(s) -> associa track.json/.srt/imagem
+-> Metadata enriquece tags -> UI renderiza -> Player cria blob URL e reproduz.
+
+3. FUNCIONALIDADES JÁ IMPLEMENTADAS
+
+- showDirectoryPicker() para diretório quando disponível.
+- Fallback input[type=file][webkitdirectory].
+- Varredura de áudio, track.json, .srt e imagens webp/png/jpg/jpeg.
+- Leitura de título, artista, álbum e capa embutida via jsmediatags.
+- Duração por HTMLAudioElement, quando não fornecida.
+- Reprodução, volume, seek, fila, shuffle, repeat normal/all/one.
+- Biblioteca, álbuns, artistas, busca, ordenação, playlists e favoritos.
+- Letras sincronizadas por linha em track.json ou SRT.
+- Exibição de original, tradução ou ambos, quando translated está presente.
+- PWA instalável e offline para a interface; biblioteca local não é cacheada.
+- Leitura do perfil legado track.json no diretório do áudio.
+
+Limitações identificadas:
+
+- library.json não é lido hoje.
+- Não há importador de ZIP.
+- Não há renderização de timings por palavra/caractere.
+- Não há LRC, WebVTT, JSON externo de letra ou tradução em arquivo separado.
+- No fallback webkitdirectory atual, apenas áudio é coletado; track.json, SRT e
+  capa externa não são associados.
+- Sem meta.id, o fallback é file.name; renomear/mover afeta estabilidade.
+- Capa externa indicada por meta.cover é associada no fluxo
+  showDirectoryPicker(); capa embutida é o fallback.
+
+4. RESPONSABILIDADES
+
+Download Free — PROPOSTO:
+- Baixar/manipular somente arquivos cujo uso seja autorizado.
+- Converter localmente quando necessário, extrair/escrever metadados, incorporar
+  capa quando possível, preparar letras e exportar uma biblioteca autocontida.
+- Não requer API, servidor, banco remoto ou login para esta integração.
+
+Local Music:
+- IDENTIFICADO: importa arquivos escolhidos pelo usuário e os toca sem enviar a
+  biblioteca a servidor.
+- PROPOSTO: reconhecer os manifestos e extensões deste contrato sem remover o
+  fluxo atual.
+
+A integração é opcional: uma pasta comum de músicas continua válida mesmo sem
+Download Free, JSON, capa ou letra.
+
+5. FORMATOS DE ÁUDIO
+
+Aceitos hoje pelo scanner (IDENTIFICADO):
+mp3, wav, ogg, aac, m4a, flac e opus.
+
+A aceitação da extensão não garante decodificação em todos os navegadores. O
+código trata explicitamente MIME de .opus quando o File chega sem tipo.
+
+Perfil de exportação recomendado (PROPOSTO):
+1. MP3 (.mp3; MPEG Layer III): máxima interoperabilidade.
+2. M4A/AAC-LC (.m4a): alternativa preferencial, inclusive em Apple.
+3. OGG/Opus: opcional, mediante teste no navegador alvo.
+4. FLAC: opcional para preservação; oferecer MP3/M4A se houver Safari/iOS.
+
+WAV é aceito, mas não é recomendado para exportação por tamanho e por
+interoperabilidade inferior de tags/capas. A extensão deve corresponder ao
+container real.
+
+6. ESTRUTURA DE EXPORTAÇÃO RECOMENDADA (PROPOSTO)
+
+A exportação é uma pasta autocontida. Todos os caminhos usam "/", são relativos
+à raiz e não podem conter "..", URL, unidade de disco ou caminho absoluto.
+
+library/
+  library.json
+  artists/
+    artista-slug--artist-id/
+      album-slug--release-id/
+        01--track-slug--track-id/
+          audio.mp3
+          cover.webp
+          track.json
+          lyrics.srt                 (opcional; compatibilidade)
+
+Uma pasta por faixa evita colisões de audio.mp3/cover.webp. Diretórios servem
+para leitura humana; IDs e manifestos são a referência de máquina.
+
+Para compatibilidade imediata, track.json fica ao lado do áudio e cover aponta
+para arquivo no mesmo diretório. library.json é recomendado para importação
+futura, mas não é consumido pelo Local Music atual.
+
+7. METADADOS E CAPAS
+
+Precedência proposta:
+1. track.json é a fonte de verdade da exportação.
+2. Tags incorporadas são redundância para players comuns.
+3. Nome do arquivo é apenas fallback humano.
+
+Quando permitido pelo container, o exportador deve gravar título, artista,
+álbum, albumArtist, número de faixa/disco, data/ano, gênero e capa. MP3 deve
+usar ID3v2.3/ID3v2.4; M4A, átomos iTunes compatíveis; FLAC/Ogg, Vorbis Comments
+e picture apropriado. Esta é recomendação, não comportamento confirmado do
+Download Free.
+
+Capa recomendada: cover.webp (ou cover.jpg por compatibilidade), quadrada,
+sRGB, 800–1600 px. Incorporar a mesma imagem no áudio quando possível. JSON
+referencia caminho relativo; nunca data URL.
+
+8. IDENTIFICADORES ESTÁVEIS (PROPOSTO)
+
+track.id é obrigatório e é a chave permanente da faixa exportada. Use UUID v7
+(preferencial) ou UUID v4, em minúsculas. Nunca derive do nome, caminho,
+artista, título, bitrate ou ordem de exportação, nem reutilize o ID.
+
+O ID se preserva ao renomear, mover, corrigir tags, trocar capa ou converter o
+mesmo master. Uma edição musical materialmente distinta recebe novo ID.
+identifiers pode conter ISRC/sourceTrackId, mas não substitui id.
+
+audio.sha256 pode detectar igualdade dos bytes exportados; não é ID porque muda
+ao recodificar ou regravar tags.
+
+9. JSON DE INTERCÂMBIO (PROPOSTO)
+
+JSON é UTF-8 sem BOM, preferencialmente LF, números finitos e datas ISO 8601.
+Campos desconhecidos devem ser ignorados. Omitir valores desconhecidos é melhor
+que usar string vazia; null é usado somente quando explicitamente permitido.
+
+9.1 library.json
+
+{
+  "schema": "local-music-library",
+  "protocolVersion": "1.1.0",
+  "libraryId": "018f0d6a-6c11-7a62-9fe6-8cdb6ac0718d",
+  "exportedAt": "2026-10-04T18:30:00Z",
+  "generator": { "name": "Download Free", "version": "1.0.0" },
+  "tracks": [
+    {
+      "id": "018f0d7d-23dc-7f1c-9267-2d740ab0e1c3",
+      "path": "artists/peter-paul-and-mary--artist-01/very-best--release-01/01--500-miles--018f0d7d-23dc-7f1c-9267-2d740ab0e1c3/track.json"
+    }
+  ]
+}
+
+libraryId é estável para a biblioteca; exportedAt pode mudar. library.json é
+índice, não substituto de track.json.
+
+9.2 track.json — perfil 1.1 proposto
+
+{
+  "schema": "local-music-track",
+  "protocolVersion": "1.1.0",
+  "id": "018f0d7d-23dc-7f1c-9267-2d740ab0e1c3",
+  "title": "500 Miles",
+  "artist": "Peter, Paul and Mary",
+  "album": "The Very Best Of",
+  "albumArtist": "Peter, Paul and Mary",
+  "trackNumber": 1,
+  "discNumber": 1,
+  "year": 2004,
+  "genre": "Folk",
+  "language": "en",
+  "duration": 167.24,
+  "audio": {
+    "path": "audio.mp3",
+    "format": "mp3",
+    "mime": "audio/mpeg",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "cover": { "path": "cover.webp", "mime": "image/webp" },
+  "source": { "label": "Arquivo autorizado pelo usuário" },
+  "identifiers": { "isrc": null, "sourceTrackId": null },
+  "lyrics": {
+    "format": "local-music-lyrics",
+    "version": "1.1.0",
+    "language": "en",
+    "lines": [
+      {
+        "id": "l-0001",
+        "start": 42.15,
+        "end": 45.9,
+        "text": "If you miss the train I'm on",
+        "translation": {
+          "language": "pt-BR",
+          "text": "Se você perder o trem em que estou"
+        },
+        "tokens": [
+          { "start": 42.15, "end": 42.5, "startChar": 0, "endChar": 2 },
+          { "start": 42.51, "end": 42.9, "startChar": 3, "endChar": 7 }
+        ]
+      }
+    ]
+  },
+  "export": {
+    "createdAt": "2026-10-04T18:30:00Z",
+    "updatedAt": "2026-10-04T18:30:00Z"
+  }
+}
+
+Mínimo do perfil: schema, protocolVersion, id, title, artist, duration e
+audio.path.
+
+9.3 Perfil legado imediatamente reconhecido pelo Local Music
+
+{
+  "protocolVersion": "1.0",
+  "id": "018f0d7d-23dc-7f1c-9267-2d740ab0e1c3",
+  "title": "500 Miles",
+  "artist": "Peter, Paul and Mary",
+  "duration": 167.24,
+  "audio": "audio.mp3",
+  "cover": "cover.webp",
+  "lyrics": [
+    {
+      "start": 42.15,
+      "end": 45.9,
+      "original": "If you miss the train I'm on",
+      "translated": "Se você perder o trem em que estou"
+    }
+  ]
+}
+
+O perfil 1.1 exigirá evolução futura do Local Music. O perfil 1.0 acima é o
+formato que o leitor atual reconhece.
+
+10. LETRAS, SINCRONIZAÇÃO E TRADUÇÕES (PROPOSTO)
+
+lyrics.lines é ordenado por start. start/end são segundos com ponto flutuante,
+relativos ao início do áudio; start >= 0 e end >= start. text é o verso
+original em Unicode NFC. id é estável dentro da faixa.
+
+tokens é opcional e habilita timing por palavra/caractere:
+- startChar é inclusivo e endChar é exclusivo.
+- Os índices contam unidades UTF-16 do JavaScript, para uso direto com
+  text.slice(startChar, endChar).
+- start/end são tempos absolutos, não offsets da linha.
+- Tokens respeitam a ordem textual e temporal; lacunas para pontuação são
+  permitidas.
+
+Um token pode cobrir palavra+pontuação ou um/mais caracteres. Sem tokens, com
+tokens inválidos, ou em leitor que não os suporte, o fallback é destacar a linha
+inteira.
+
+translation fica dentro da linha original e liga-se por lines[n].id, nunca por
+aproximação textual. Ela herda start/end do verso. Uma linha sem tradução omite
+translation. Uma extensão futura pode usar translations (lista por idioma);
+1.1 define translation singular.
+
+Compatibilidade: SRT ao lado do áudio é aceito hoje, mas só representa timing de
+linha e texto. Não é fonte de verdade para tradução vinculada ou tokens.
+
+11. AUSÊNCIA DE DADOS E FALHAS
+
+Exportador proposto:
+- Sem capa: omitir cover; não criar imagem vazia.
+- Sem letra: omitir lyrics e não criar SRT vazio.
+- Sem tradução: omitir translation naquela linha.
+- Sem metadados: usar nome legível do arquivo apenas como último título; omitir
+  os demais campos opcionais desconhecidos.
+- Sem duração confiável: no legado, duration pode ser 0; em 1.1 produzir a
+  faixa com duration: 0 e aviso de exportação.
+- Áudio sem tag/capa continua válido e preserva id.
+
+Consumidor:
+- O Local Music atual usa “Artista desconhecido”, “Álbum desconhecido”, nota
+  musical para capa e mensagens para letra/tradução ausentes.
+- A UI não deve mostrar undefined, null, NaN ou caminho técnico.
+- Erro em uma faixa, JSON, capa ou letra não deve impedir importar as demais.
+
+12. NAVEGADORES, ARQUIVOS LOCAIS E IOS
+
+Nenhum servidor próprio é necessário. O Local Music deve ser servido como site
+estático HTTPS; o usuário concede acesso aos arquivos pelo seletor do navegador.
+A PWA cacheia a interface, não deve copiar músicas para cache sem ação explícita.
+
+- Chromium desktop/Android: showDirectoryPicker é o caminho completo atual,
+  inclusive para áudio, JSON, capas e SRT.
+- Firefox: sem suporte geral à File System Access API; depende do seletor e de
+  capacidades variáveis da plataforma.
+- Safari/iOS: não oferece showDirectoryPicker. Seleção de diretório e acesso
+  persistente são limitados; no fallback atual, JSON/capa/SRT auxiliares não
+  são coletados.
+- Não presumir suporte de iOS/Safari a OGG/Opus ou FLAC; MP3 e AAC/M4A são as
+  opções mais seguras.
+- file:// não é apropriado devido a restrições de origem para módulos, service
+  worker e APIs de arquivos.
+
+Roteiro iOS futuro: preservar “selecionar músicas” como fallback universal,
+usar “selecionar pasta exportada” apenas onde houver suporte e, em iOS,
+considerar seleção explícita/múltipla dos arquivos, sem prometer descoberta
+automática do manifesto auxiliar.
+
+13. VERSIONAMENTO E RETROCOMPATIBILIDADE
+
+protocolVersion usa SemVer (MAJOR.MINOR.PATCH):
+- PATCH: correção documental/validação sem semântica nova.
+- MINOR: campo opcional/extensão ignorável por leitor antigo.
+- MAJOR: remoção, renomeação, alteração de tipo/significado ou caminho
+  incompatível.
+
+Regras:
+1. Não mudar significado de campo publicado dentro da mesma major.
+2. Produtor anuncia a menor versão necessária.
+3. Consumidor ignora campos desconhecidos da mesma major.
+4. Major desconhecida gera erro compreensível sem destruir dados locais.
+5. O produtor pode manter o perfil legado 1.0 durante a migração ao 1.1.
+6. track.id, libraryId e IDs de linhas nunca mudam somente por atualização de
+   schema.
+
+14. ROTEIRO SIMPLES DE INTEGRAÇÃO FUTURA (NÃO IMPLEMENTADO)
+
+1. Download Free exporta pasta autocontida por faixa com áudio, track.json
+   legado 1.0 e capa/tags incorporadas quando houver.
+2. Valida localmente JSON, UUIDs, caminhos relativos, duração e referências;
+   sem depender de rede.
+3. Local Music preserva a importação atual de músicas comuns sem JSON.
+4. Evolui library.js para library.json, áudio/capa por .path e perfil 1.1 sem
+   remover 1.0.
+5. Evolui lyrics.js/UI para tokens e translation por linha, mantendo destaque de
+   linha como fallback.
+6. Testa Chromium desktop, Chrome Android, Firefox e Safari/iOS antes de
+   anunciar suporte a pasta exportada.
+7. Versiona o contrato antes de qualquer mudança incompatível e publica
+   exemplos sem conteúdo protegido.
+
+FIM DO DOCUMENTO

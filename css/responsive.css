@@ -1,0 +1,84 @@
+@media(min-width:700px) {
+  body {
+    background:var(--background)
+  }
+  .app-shell {
+    max-width:1120px;
+    min-height:100vh;
+    padding-left:210px
+  }
+  .bottom-nav {
+    top:0;
+    bottom:0;
+    right:auto;
+    width:190px;
+    height:100vh;
+    padding:25px 12px;
+    display:grid;
+    grid-template-columns:1fr;
+    align-content:center;
+    background:var(--nav-background);
+    border-top:0;
+    border-right:1px solid var(--border)
+  }
+  .nav-item {
+    width:100%;
+    height:54px;
+    display:flex;
+    gap:13px;
+    align-items:center;
+    padding-left:17px;
+    text-align:left;
+    margin:2px 0;
+    font-size:.84rem
+  }
+  .nav-icon {
+    flex:none
+  }
+  .mini-player {
+    left:210px;
+    right:0;
+    bottom:0;
+    border-radius:0
+  }
+  .app-shell #screens {
+    padding-bottom:calc(var(--player-height) + 25px)
+  }
+  .screen {
+    max-width:900px
+  }
+  .album-grid {
+    grid-template-columns:repeat(4,1fr)
+  }
+  .playlist-row {
+    grid-template-columns:repeat(3,1fr)
+  }
+  .player-dialog {
+    min-height:100vh
+  }
+  .sheet {
+    margin:auto;
+    border-radius:24px;
+    width:min(620px,calc(100% - 32px))
+  }
+  .full-cover {
+    width:min(45vw,390px);
+    height:min(45vw,390px)
+  }
+}
+
+@media(max-width:430px) {
+  :root { --page-padding:16px }
+  .playlist-detail-actions { flex-wrap:wrap }
+  .playlist-detail-actions .secondary-button { flex:1 }
+  .stats span { font-size:.6rem }
+  .full-cover { width:min(78vw,340px); height:min(78vw,340px) }
+}
+
+@media(max-width:350px) {
+  .mini-controls #prev { display:none }
+  .mini-player { left:5px; right:5px; padding-inline:8px }
+  .nav-item { font-size:.61rem }
+  .nav-icon .icon { width:20px; height:20px }
+  .row-reorder { display:none }
+}

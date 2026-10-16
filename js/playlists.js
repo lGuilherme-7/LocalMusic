@@ -18,7 +18,23 @@ const Playlists = (() => {
    */
   function getAll() {
     const data = Storage.get(STORAGE_KEY);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    let changed = false;
+    const ids = new Set();
+    const normalized = data.filter(item => item && typeof item === 'object').map(item => {
+      let id = typeof item.id === 'string' && item.id ? item.id : _genId();
+      if (ids.has(id)) {
+        id = _genId();
+        changed = true;
+      }
+      ids.add(id);
+      const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Sem título';
+      const tracks = Array.isArray(item.tracks) ? [...new Set(item.tracks.filter(trackId => typeof trackId === 'string' && trackId))] : [];
+      if (id !== item.id || name !== item.name || tracks.length !== item.tracks?.length) changed = true;
+      return { ...item, id, name, tracks, createdAt: Number(item.createdAt) || Date.now() };
+    });
+    if (changed || normalized.length !== data.length) _save(normalized);
+    return normalized;
   }
 
   /**
@@ -34,7 +50,8 @@ const Playlists = (() => {
    * @returns {string}
    */
   function _genId() {
-    return 'pl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    if (globalThis.crypto?.randomUUID) return `pl_${crypto.randomUUID()}`;
+    return `pl_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
   /**
@@ -124,6 +141,17 @@ const Playlists = (() => {
     return true;
   }
 
+  /** Move uma faixa e preserva a nova ordem da playlist. */
+  function moveTrack(playlistId, from, to) {
+    const list = getAll();
+    const pl = list.find(item => item.id === playlistId);
+    if (!pl || from < 0 || to < 0 || from >= pl.tracks.length || to >= pl.tracks.length || from === to) return false;
+    const [trackId] = pl.tracks.splice(from, 1);
+    pl.tracks.splice(to, 0, trackId);
+    _save(list);
+    return true;
+  }
+
   /**
    * Verifica se uma faixa está em uma playlist.
    * @param {string} playlistId
@@ -183,7 +211,7 @@ const Playlists = (() => {
 
   return {
     getAll, create, rename, remove, getById,
-    addTrack, removeTrack, hasTrack,
+    addTrack, removeTrack, moveTrack, hasTrack,
     exportJSON, importJSON, count
   };
 

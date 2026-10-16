@@ -1,151 +1,97 @@
-/**
- * service-worker.js
- * Estratégia Cache First para assets estáticos do Local Music.
- * Músicas nunca são cacheadas — ficam no dispositivo do usuário.
- * O app funciona offline após a primeira visita.
- */
+/** Shell offline do Local Music. Arquivos de música nunca são armazenados no cache. */
+const CACHE_NAME = 'local-music-shell-v13';
+const CACHE_PREFIX = 'local-music-shell-';
+const APP_BASE = new URL('./', self.registration.scope);
+const asset = path => new URL(path, APP_BASE).href;
 
-const CACHE_NAME    = 'LocalMusic-v5';
-const CACHE_VERSION = 5;
-
-/** Assets estáticos que serão cacheados no install */
 const STATIC_ASSETS = [
-  '/LocalMusic/',
-  '/LocalMusic/index.html',
-  '/LocalMusic/welcome.html',
-  '/LocalMusic/css/style.css',
-  '/LocalMusic/js/app.js',
-  '/LocalMusic/js/library.js',
-  '/LocalMusic/js/metadata.js',
-  '/LocalMusic/js/player.js',
-  '/LocalMusic/js/queue.js',
-  '/LocalMusic/js/search.js',
-  '/LocalMusic/js/playlists.js',
-  '/LocalMusic/js/favorites.js',
-  '/LocalMusic/js/storage.js',
-  '/LocalMusic/js/ui.js',
-  '/LocalMusic/icons/icon.svg',
-  '/LocalMusic/icons/icon-192.png',
-  '/LocalMusic/icons/icon-512.png',
-  '/LocalMusic/manifest.json',
-  '/LocalMusic/covers/fav-1.svg',
-  '/LocalMusic/covers/fav-2.svg',
-  '/LocalMusic/covers/fav-3.svg',
-  '/LocalMusic/covers/fav-4.svg',
-  '/LocalMusic/covers/genres/sertanejo.svg',
-  '/LocalMusic/covers/genres/funk.svg',
-  '/LocalMusic/covers/genres/rap.svg',
-  '/LocalMusic/covers/genres/mpb.svg',
-  '/LocalMusic/covers/genres/rock.svg',
-  '/LocalMusic/covers/genres/pop.svg',
-  '/LocalMusic/covers/genres/eletronico.svg',
-  '/LocalMusic/covers/genres/gospel.svg'
-];
+  './', './index.html', './welcome.html', './manifest.json',
+  './css/style.css', './css/tokens.css', './css/base.css', './css/components.css', './css/player.css', './css/responsive.css',
+  './js/app.js', './js/library.js', './js/metadata.js', './js/player.js', './js/queue.js', './js/search.js',
+  './js/playlists.js', './js/favorites.js', './js/storage.js', './js/lyrics.js', './js/zip.js', './js/media-session.js',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
+].map(asset);
 
-/** Domínios externos permitidos em cache (fontes e CDN) */
-const CACHEABLE_ORIGINS = [
+const CACHEABLE_ORIGINS = new Set([
   'https://fonts.googleapis.com',
   'https://fonts.gstatic.com',
   'https://cdnjs.cloudflare.com'
-];
+]);
 
-// ── Install ───────────────────────────────────────────────────
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    }).then(() => {
-      // Ativa imediatamente sem esperar tabs antigas fecharem
-      return self.skipWaiting();
-    })
-  );
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await Promise.allSettled(STATIC_ASSETS.map(url => cache.add(url)));
+    await self.skipWaiting();
+  })());
 });
 
-// ── Activate ──────────────────────────────────────────────────
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      );
-    }).then(() => {
-      // Assume controle de todas as tabs abertas imediatamente
-      return self.clients.claim();
-    })
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-// ── Fetch ─────────────────────────────────────────────────────
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.protocol === 'blob:' || request.destination === 'audio') return;
 
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Nunca cacheia requisições para a cobalt.tools API
-  if (url.hostname === 'api.cobalt.tools') {
-    event.respondWith(fetch(event.request));
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
     return;
   }
 
-  // Nunca cacheia arquivos de áudio (blob: ou qualquer audio/*)
-  if (event.request.destination === 'audio') {
-    event.respondWith(fetch(event.request));
-    return;
-  }
+  const sameOrigin = url.origin === self.location.origin;
+  const allowedExternal = CACHEABLE_ORIGINS.has(url.origin);
+  if (!sameOrigin && !allowedExternal) return;
 
-  // Nunca cacheia requisições de blob URLs
-  if (url.protocol === 'blob:') {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // Cache First para assets do próprio app e origens externas permitidas
-  const isSameOrigin    = url.origin === self.location.origin;
-  const isAllowedOrigin = CACHEABLE_ORIGINS.some(o => event.request.url.startsWith(o));
-
-  if (isSameOrigin || isAllowedOrigin) {
-    event.respondWith(_cacheFirst(event.request));
-    return;
-  }
-
-  // Qualquer outra requisição vai direto para a rede
-  event.respondWith(fetch(event.request));
+  const changingAsset = sameOrigin && ['script', 'style', 'worker'].includes(request.destination);
+  event.respondWith(changingAsset ? staleWhileRevalidate(request) : cacheFirst(request));
 });
 
-// ── Estratégias ───────────────────────────────────────────────
-
-/**
- * Cache First: serve do cache se disponível, senão busca na rede
- * e salva no cache para uso futuro.
- * @param {Request} request
- * @returns {Promise<Response>}
- */
-async function _cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-
+async function networkFirst(request) {
   try {
     const response = await fetch(request);
-
-    // Só cacheia respostas válidas (status 200, tipo básico ou cors)
-    if (
-      response.ok &&
-      (response.type === 'basic' || response.type === 'cors')
-    ) {
+    if (response.ok) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
-
     return response;
   } catch {
-    // Offline e sem cache: retorna página de fallback se disponível
-    const fallback = await caches.match('/LocalMusic/index.html');
-    return fallback || new Response('Offline — abra o app quando estiver conectado.', {
-      status:  503,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-    });
+    return (await caches.match(request))
+      || (await caches.match(asset('./index.html')))
+      || new Response('Local Music está offline. Abra o app on-line uma vez para concluir a instalação.', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+  }
+}
+
+async function staleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  const update = fetch(request).then(response => {
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  }).catch(() => null);
+  return cached || (await update) || new Response('', { status: 504 });
+}
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  try {
+    const response = await fetch(request);
+    if (response.ok && (response.type === 'basic' || response.type === 'cors')) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return new Response('', { status: 504 });
   }
 }

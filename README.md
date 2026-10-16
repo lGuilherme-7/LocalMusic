@@ -8,12 +8,14 @@ Player de música pessoal que roda direto no navegador — sem conta, sem stream
 
 ## O que faz
 
-- Lê uma pasta local com suas músicas (MP3, WAV, OGG, AAC, M4A, FLAC)
+- Lê pastas, arquivos avulsos e ZIPs locais com músicas (MP3, WAV, OGG, AAC, M4A, FLAC)
 - Extrai capa, título, artista e álbum dos arquivos automaticamente
+- Reconhece LRC, LRC de tradução, SRT e letras TXT; letras sincronizadas acompanham o áudio e TXT é exibido estaticamente
 - Toca, pausa, avança, volta — com fila, shuffle e repeat
+- Integra controles do sistema pela Media Session API quando o navegador oferece suporte
+- Exibe letras por linha e destaque progressivo quando há timings por palavra/caractere
 - Busca em tempo real por título, artista ou álbum
 - Cria playlists e favorita músicas
-- Baixa músicas do YouTube em MP3 (via cobalt.tools)
 - Funciona offline após a primeira visita
 - Instalável como app no Android e desktop (PWA)
 
@@ -27,8 +29,7 @@ Player de música pessoal que roda direto no navegador — sem conta, sem stream
 | File System Access API | Lê pasta local no Chrome/Android |
 | Web Audio API | Reprodução de áudio no browser |
 | jsmediatags | Extração de metadados ID3 |
-| cobalt.tools API | Download de YouTube em MP3 |
-| localStorage | Persiste playlists, favoritos e preferências |
+| IndexedDB + localStorage | Persiste biblioteca importada, capas, letras, playlists, favoritos e preferências |
 | PWA (manifest + service worker) | Instalação e uso offline |
 
 ---
@@ -63,7 +64,6 @@ Player de música pessoal que roda direto no navegador — sem conta, sem stream
 │   ├── search.js       ← busca em tempo real
 │   ├── playlists.js    ← CRUD de playlists
 │   ├── favorites.js    ← favoritos
-│   ├── download.js     ← download via cobalt.tools
 │   ├── storage.js      ← localStorage
 │   └── ui.js           ← renderização do DOM
 ├── assets/
@@ -94,11 +94,46 @@ npx serve .
 
 ---
 
+## Integração
+
+Para integração com o Nexo e o formato oficial de exportação, consulte [PROTOCOLO.md](PROTOCOLO.md).
+
+### Importação do Nexo
+
+Use **Importar arquivos ou ZIP** em Você para selecionar uma exportação do Nexo, ou abra a pasta que a contém. São aceitos arquivos em subpastas e nomes com espaços, acentos e colchetes.
+
+- A letra original é identificada por arquivo LRC, SRT ou TXT com o mesmo nome-base do áudio.
+- Um sufixo de idioma, como .pt-BR.lrc, é associado como tradução e nunca substitui a letra original.
+- Um identificador final entre colchetes no áudio também associa letras e capas separadas. Assim, uma capa em Capas/_RVCDKS5D4c.jpg é ligada a uma faixa cujo nome termina em [_RVCDKS5D4c].
+- Reimportar uma faixa atualiza letra e tradução válidas sem criar outra música. Uma capa só substitui a existente quando sua qualidade mensurável é superior.
+- A biblioteca importada é armazenada localmente no navegador. Limpar manualmente os dados do site remove essa cópia.
+
+## Letras sincronizadas premium
+
+O player usa o tempo real do elemento de áudio como fonte de verdade. LRC tradicional e SRT continuam em modo por verso: o verso ativo recebe destaque e a lista o acompanha sem criar tempos que não existem.
+
+Também é aceito **Enhanced LRC** com marcas por palavra no formato interoperável abaixo:
+
+```lrc
+[00:10.000]<00:10.000>Use <00:10.500>your <00:11.000>heart
+[00:12.000]And not your eyes
+```
+
+Cada marca `<mm:ss.xxx>` inicia a palavra ou trecho seguinte. O preenchimento de uma palavra termina no início temporal seguinte; a última palavra sem um tempo final explícito apenas recebe destaque quando começa. Dados incompletos, sobrepostos ou inválidos retornam automaticamente ao modo por verso.
+
+Durante a leitura, role a letra manualmente para pausar o acompanhamento. O botão **Verso atual** volta ao trecho em reprodução. O controle **A/文** mantém a tradução opcional associada por ordem somente quando confiável ou por timestamp próximo.
+
+Para validar a sincronização por palavra, execute:
+
+```bash
+node tests/lyrics-word-sync.test.mjs
+```
+
 ## Notas
 
-- Playlists e favoritos são salvos pelo **nome do arquivo** como identificador. Renomear ou mover arquivos de pasta faz o app perder o vínculo com esses itens.
+- Playlists, favoritos, fila e preferências são persistidos localmente. Para bibliotecas integradas, use o `id` estável definido em `track.json`.
 - A posição exata da música não é salva ao fechar — ao reabrir, a música recomeça do início.
-- O download via cobalt.tools não requer cadastro nem chave de API. O arquivo vai para a pasta de Downloads do dispositivo; depois é só mover para a pasta de músicas e reabrir a biblioteca.
+- Os ícones Font Awesome Free vêm de uma CDN versionada. Após uma visita on-line com o service worker ativo, os recursos CORS do cdnjs passam a usar o cache; uma primeira abertura estritamente off-line não consegue obtê-los.
 
 ---
 
