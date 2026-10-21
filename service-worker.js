@@ -1,5 +1,5 @@
 /** Shell offline do Local Music. Arquivos de música nunca são armazenados no cache. */
-const CACHE_NAME = 'local-music-shell-v13';
+const CACHE_NAME = 'local-music-shell-v14';
 const CACHE_PREFIX = 'local-music-shell-';
 const APP_BASE = new URL('./', self.registration.scope);
 const asset = path => new URL(path, APP_BASE).href;
@@ -11,17 +11,20 @@ const STATIC_ASSETS = [
   './js/playlists.js', './js/favorites.js', './js/storage.js', './js/lyrics.js', './js/zip.js', './js/media-session.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ].map(asset);
+const STATIC_ASSET_URLS = new Set(STATIC_ASSETS);
 
 const CACHEABLE_ORIGINS = new Set([
   'https://fonts.googleapis.com',
   'https://fonts.gstatic.com',
   'https://cdnjs.cloudflare.com'
 ]);
+const APP_ASSET_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest', 'worker']);
+const EXTERNAL_ASSET_DESTINATIONS = new Set(['script', 'style', 'font']);
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await Promise.allSettled(STATIC_ASSETS.map(url => cache.add(url)));
+    await cache.addAll(STATIC_ASSETS);
     await self.skipWaiting();
   })());
 });
@@ -41,13 +44,16 @@ self.addEventListener('fetch', event => {
   if (url.protocol === 'blob:' || request.destination === 'audio') return;
 
   if (request.mode === 'navigate') {
+    if (url.origin !== self.location.origin) return;
     event.respondWith(networkFirst(request));
     return;
   }
 
   const sameOrigin = url.origin === self.location.origin;
-  const allowedExternal = CACHEABLE_ORIGINS.has(url.origin);
-  if (!sameOrigin && !allowedExternal) return;
+  const knownStaticAsset = sameOrigin && STATIC_ASSET_URLS.has(url.href);
+  const cacheableAppAsset = sameOrigin && APP_ASSET_DESTINATIONS.has(request.destination);
+  const cacheableExternalAsset = CACHEABLE_ORIGINS.has(url.origin) && EXTERNAL_ASSET_DESTINATIONS.has(request.destination);
+  if (!knownStaticAsset && !cacheableAppAsset && !cacheableExternalAsset) return;
 
   const changingAsset = sameOrigin && ['script', 'style', 'worker'].includes(request.destination);
   event.respondWith(changingAsset ? staleWhileRevalidate(request) : cacheFirst(request));

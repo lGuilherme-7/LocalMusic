@@ -67,6 +67,27 @@ let pendingTrack = null;
 let pendingContext = null;
 let queueRestored = false;
 let toastTimer = null;
+let deferredInstallPrompt = null;
+
+const isStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+
+function updateInstallOption() {
+  const button = $('install-app');
+  if (!button) return;
+  button.hidden = isStandalone() || !deferredInstallPrompt;
+}
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallOption();
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  updateInstallOption();
+  toast('Local Music foi instalado.');
+});
 
 function cover(element, track, large = false) {
   if (!element) return;
@@ -831,6 +852,19 @@ function bind() {
       .then(opened => toast(opened ? importSummary() : 'Nenhuma música compatível foi encontrada.'))
       .catch(() => toast('Não foi possível importar os arquivos selecionados.'));
   });
+  $('install-app').addEventListener('click', async () => {
+    const prompt = deferredInstallPrompt;
+    if (!prompt) return;
+    deferredInstallPrompt = null;
+    updateInstallOption();
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      if (choice?.outcome === 'accepted') toast('Instalação iniciada.');
+    } catch {
+      toast('Não foi possível iniciar a instalação.');
+    }
+  });
   $('play-last').addEventListener('click', () => {
     const track = Library.getTrackById(Storage.get('lm_last_track'));
     if (track) playTrack(track, Library.getTracks());
@@ -1020,6 +1054,7 @@ async function init() {
   $('theme-toggle').checked = theme === 'light';
   updateModeButtons();
   bind();
+  updateInstallOption();
   Library.onUpdate(tracks => {
     if (!queueRestored && tracks.length) {
       Queue.restore(tracks);

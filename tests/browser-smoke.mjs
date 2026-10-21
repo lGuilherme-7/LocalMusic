@@ -93,8 +93,69 @@ try {
   })`), { emptyVisible: true, contentHidden: true, lastHidden: true, contentDisplay: 'none', lastDisplay: 'none' }, 'estado vazio inicial incorreto');
   assert.equal(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true, 'há overflow horizontal no mobile');
   assert.equal(await evaluate('getComputedStyle(document.querySelector("#mini-player")).display === "none"'), true, 'miniplayer vazio deve permanecer oculto');
-  assert.equal(await evaluate('fetch("manifest.json").then(response => response.json()).then(manifest => manifest.start_url === "./" && manifest.scope === "./")'), true, 'manifest relativo inválido');
+  assert.deepEqual(await evaluate(`fetch('./manifest.json').then(response => response.json()).then(manifest => ({
+    name: manifest.name,
+    startUrl: manifest.start_url,
+    scope: manifest.scope,
+    display: manifest.display,
+    icons: manifest.icons.map(({ src, sizes, purpose }) => ({ src, sizes, purpose: purpose || null }))
+  }))`), {
+    name: 'Local Music',
+    startUrl: './',
+    scope: './',
+    display: 'standalone',
+    icons: [
+      { src: 'icons/icon.svg', sizes: 'any', purpose: null },
+      { src: 'icons/icon-192.png', sizes: '192x192', purpose: null },
+      { src: 'icons/icon-512.png', sizes: '512x512', purpose: 'any maskable' }
+    ]
+  }, 'manifest PWA inválido');
+  assert.deepEqual(await evaluate(`Promise.all(['icons/icon-192.png', 'icons/icon-512.png'].map(src => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve({ src, width: image.naturalWidth, height: image.naturalHeight }), { once: true });
+    image.addEventListener('error', reject, { once: true });
+    image.src = src;
+  })))`), [
+    { src: 'icons/icon-192.png', width: 192, height: 192 },
+    { src: 'icons/icon-512.png', width: 512, height: 512 }
+  ], 'ícones PWA inválidos');
   assert.equal(await evaluate('Promise.race([navigator.serviceWorker.ready.then(() => true), new Promise(resolve => setTimeout(() => resolve(false), 3000))])'), true, 'service worker não ficou pronto');
+  assert.equal(await evaluate('navigator.serviceWorker.ready.then(registration => registration.scope === new URL("./", location.href).href)'), true, 'escopo do service worker inválido');
+  assert.deepEqual(await evaluate(`(async () => {
+    const installEvent = new Event('beforeinstallprompt', { cancelable: true });
+    let promptCalls = 0;
+    Object.defineProperties(installEvent, {
+      prompt: { value: async () => { promptCalls += 1; } },
+      userChoice: { value: Promise.resolve({ outcome: 'dismissed' }) }
+    });
+    window.dispatchEvent(installEvent);
+    const button = document.querySelector('#install-app');
+    const offered = installEvent.defaultPrevented && !button.hidden;
+    button.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    return { offered, promptCalls, hidden: button.hidden };
+  })()`), { offered: true, promptCalls: 1, hidden: true }, 'opção de instalação nativa inválida');
+
+  await send('Page.reload');
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await evaluate('document.readyState === "complete"')) break;
+    await delay(100);
+  }
+  await delay(250);
+  assert.equal(await evaluate('Boolean(navigator.serviceWorker.controller)'), true, 'service worker não controlou a recarga');
+  const { installabilityErrors } = await send('Page.getInstallabilityErrors');
+  assert.deepEqual(installabilityErrors, [], 'navegador reportou impedimentos para instalar a PWA');
+  await send('Network.enable');
+  await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+  await send('Page.reload');
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await evaluate('document.readyState === "complete"')) break;
+    await delay(100);
+  }
+  assert.equal(await evaluate('document.querySelector("#screen-home").classList.contains("active")'), true, 'shell não abriu offline');
+  assert.equal(await evaluate('fetch("./manifest.json").then(response => response.ok)'), true, 'manifest não foi servido offline');
+  await send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
 
   await evaluate(`window.showDirectoryPicker = async () => ({
     async *values() {

@@ -83,14 +83,29 @@ Não precisa de Node, npm ou qualquer instalação. Basta servir os arquivos est
 
 ```bash
 # Python
-python -m http.server 8080
-
-# ou com Node
-npx serve .
+python -m http.server 8765 --bind 127.0.0.1
 ```
 
+Depois, acesse `http://localhost:8765`. O servidor fica restrito ao seu computador; não é necessário abrir portas no Firewall.
 
 > O app não funciona abrindo o `index.html` direto como arquivo (`file://`) por restrições de segurança do browser na File System Access API.
+
+---
+
+## Instalar no Windows
+
+1. Inicie o servidor local e abra `http://localhost:8765` no Chrome ou Edge.
+2. Aguarde o primeiro carregamento com conexão. Em **Você**, a opção **Instalar Local Music** aparece somente quando o navegador disponibiliza o prompt nativo.
+3. Se a opção não aparecer, use o menu do navegador: no Chrome, **⋮ > Instalar Local Music**; no Edge, **… > Aplicativos > Instalar este site como um aplicativo**.
+4. Confirme a instalação e abra o Local Music pelo menu Iniciar ou pelo atalho criado.
+
+A instalação usa o modo `standalone`: a janela do app não mostra abas nem barra de endereço, mas preserva os controles normais da janela do Windows. A instalação de `localhost` não cria um executável; mantenha o servidor local disponível para receber atualizações ou fazer um primeiro carregamento em um novo perfil do navegador.
+
+## Uso offline
+
+O Service Worker guarda apenas o shell do app (HTML, CSS, JavaScript, manifesto e ícones) e permite reabrir a interface sem rede após a primeira visita. Músicas, capas, letras, playlists e preferências continuam no armazenamento local já usado pelo app; a biblioteca musical nunca é copiada para o Cache Storage. Não limpe os dados do site se quiser preservá-la.
+
+Os recursos de fontes, ícones e metadados que vêm de CDN são armazenados depois de serem carregados em uma visita controlada pelo Service Worker. Portanto, faça ao menos uma recarga on-line antes de depender de uma abertura totalmente off-line; sem isso, o shell e a biblioteca continuam disponíveis, mas esses recursos externos podem usar fallback.
 
 ---
 

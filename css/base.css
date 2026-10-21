@@ -681,6 +681,7 @@ section+section {
 }
 #change-folder .icon,
 #import-files .icon,
+#install-app .icon,
 .settings a.settings-row .icon {
   color:var(--text-secondary);
   font-size:var(--icon-size-small)

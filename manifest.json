@@ -8,7 +8,6 @@
   "display": "standalone",
   "background_color": "#0B0811",
   "theme_color": "#0B0811",
-  "orientation": "portrait",
   "lang": "pt-BR",
   "categories": ["music", "entertainment"],
   "icons": [
