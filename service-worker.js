@@ -1,8 +1,9 @@
 /** Shell offline do Local Music. Arquivos de música nunca são armazenados no cache. */
-const CACHE_NAME = 'local-music-shell-v14';
+const CACHE_NAME = 'local-music-shell-v16';
 const CACHE_PREFIX = 'local-music-shell-';
 const APP_BASE = new URL('./', self.registration.scope);
 const asset = path => new URL(path, APP_BASE).href;
+const CACHE_COMPLETE_MARKER = asset('./__local_music_cache_complete__');
 
 const STATIC_ASSETS = [
   './', './index.html', './welcome.html', './manifest.json',
@@ -23,9 +24,20 @@ const EXTERNAL_ASSET_DESTINATIONS = new Set(['script', 'style', 'font']);
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(STATIC_ASSETS);
-    await self.skipWaiting();
+    const existingCache = await caches.open(CACHE_NAME);
+    if (await existingCache.match(CACHE_COMPLETE_MARKER)) {
+      throw new Error('O nome do cache deve mudar antes de atualizar o shell.');
+    }
+    await caches.delete(CACHE_NAME);
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(STATIC_ASSETS);
+      await cache.put(CACHE_COMPLETE_MARKER, new Response(CACHE_NAME));
+      await self.skipWaiting();
+    } catch (error) {
+      await caches.delete(CACHE_NAME);
+      throw error;
+    }
   })());
 });
 
@@ -45,7 +57,7 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     if (url.origin !== self.location.origin) return;
-    event.respondWith(networkFirst(request));
+    event.respondWith(shellFirst(request));
     return;
   }
 
@@ -55,46 +67,36 @@ self.addEventListener('fetch', event => {
   const cacheableExternalAsset = CACHEABLE_ORIGINS.has(url.origin) && EXTERNAL_ASSET_DESTINATIONS.has(request.destination);
   if (!knownStaticAsset && !cacheableAppAsset && !cacheableExternalAsset) return;
 
-  const changingAsset = sameOrigin && ['script', 'style', 'worker'].includes(request.destination);
-  event.respondWith(changingAsset ? staleWhileRevalidate(request) : cacheFirst(request));
+  event.respondWith(cacheFirst(request));
 });
 
-async function networkFirst(request) {
+async function shellFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request) || await cache.match(asset('./index.html'));
+  if (cached) return cached;
+
   try {
     const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+    if (response.ok && response.type === 'basic') {
+      await cache.put(request, response.clone());
     }
     return response;
   } catch {
-    return (await caches.match(request))
-      || (await caches.match(asset('./index.html')))
-      || new Response('Local Music está offline. Abra o app on-line uma vez para concluir a instalação.', {
-        status: 503,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
-      });
+    return new Response('Local Music está offline. Abra o app on-line uma vez para concluir a instalação.', {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+    });
   }
 }
 
-async function staleWhileRevalidate(request) {
+async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
-  const update = fetch(request).then(response => {
-    if (response.ok) cache.put(request, response.clone());
-    return response;
-  }).catch(() => null);
-  return cached || (await update) || new Response('', { status: 504 });
-}
-
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
   if (cached) return cached;
   try {
     const response = await fetch(request);
     if (response.ok && (response.type === 'basic' || response.type === 'cors')) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+      await cache.put(request, response.clone());
     }
     return response;
   } catch {

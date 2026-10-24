@@ -163,6 +163,24 @@
   opacity:1;
   transform:translateX(-50%)
 }
+.startup-error {
+  display:grid;
+  gap:10px;
+  margin:0 0 18px;
+  padding:14px;
+  border:1px solid var(--border-strong);
+  border-radius:var(--radius-small);
+  background:var(--surface-card-gradient);
+  box-shadow:var(--shadow-card)
+}
+.startup-error p {
+  color:var(--text-secondary);
+  font-size:.86rem;
+  line-height:1.45
+}
+.startup-error button {
+  justify-self:start
+}
 .queue-item {
   display:flex;
   gap:8px;

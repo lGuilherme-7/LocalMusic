@@ -8,6 +8,15 @@
  */
 
 const Storage = (() => {
+  const reportedErrors = new Set();
+
+  function warnOnce(operation, error) {
+    if (reportedErrors.has(operation)) return;
+    reportedErrors.add(operation);
+    console.warn(`Local Music storage: falha ao ${operation}.`, {
+      name: error?.name || 'StorageError'
+    });
+  }
 
   /**
    * Lê um valor do localStorage e desserializa o JSON.
@@ -19,7 +28,8 @@ const Storage = (() => {
       const raw = localStorage.getItem(key);
       if (raw === null) return null;
       return JSON.parse(raw);
-    } catch {
+    } catch (error) {
+      warnOnce('ler dados locais', error);
       return null;
     }
   }
@@ -32,8 +42,8 @@ const Storage = (() => {
   function set(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      // Silencioso — quota exceeded ou modo privado
+    } catch (error) {
+      warnOnce('salvar dados locais', error);
     }
   }
 
@@ -44,8 +54,8 @@ const Storage = (() => {
   function remove(key) {
     try {
       localStorage.removeItem(key);
-    } catch {
-      // Silencioso
+    } catch (error) {
+      warnOnce('remover dados locais', error);
     }
   }
 

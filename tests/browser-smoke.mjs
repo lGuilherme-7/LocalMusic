@@ -496,20 +496,209 @@ try {
   assert.equal(await evaluate('document.querySelector("#lyrics-return-current").click(); document.querySelector("#lyrics-return-current").hidden'), true, 'controle deve restaurar o acompanhamento automático');
   await evaluate('document.querySelector("#lyrics-dialog").close(); document.querySelector("#lyrics-translation").click()');
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#lyrics .translation")].map(node => node.textContent)'), ['Use seu coração', 'E não seus olhos'], 'tradução LRC não foi associada à letra original');
-  await evaluate('window.showDirectoryPicker = async () => ({ async *values() { yield { kind: "file", name: "Playback fixture.wav", getFile: async () => { const bytes = new Uint8Array(8044); const view = new DataView(bytes.buffer); bytes.set([82, 73, 70, 70], 0); view.setUint32(4, 8036, true); bytes.set([87, 65, 86, 69, 102, 109, 116, 32], 8); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 8000, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true); bytes.set([100, 97, 116, 97], 36); view.setUint32(40, 8000, true); bytes.fill(128, 44); return new File([bytes], "Playback fixture.wav", { type: "audio/wav", lastModified: 4000 }); } }; } }); document.querySelector("#open-folder").click()');
+  await evaluate(`(() => {
+    const makeWav = (name, lastModified) => {
+      const dataSize = 8000 * 140;
+      const bytes = new Uint8Array(dataSize + 44);
+      const view = new DataView(bytes.buffer);
+      bytes.set([82, 73, 70, 70], 0);
+      view.setUint32(4, dataSize + 36, true);
+      bytes.set([87, 65, 86, 69, 102, 109, 116, 32], 8);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, 8000, true);
+      view.setUint32(28, 8000, true);
+      view.setUint16(32, 1, true);
+      view.setUint16(34, 8, true);
+      bytes.set([100, 97, 116, 97], 36);
+      view.setUint32(40, dataSize, true);
+      bytes.fill(128, 44);
+      return new File([bytes], name, { type: 'audio/wav', lastModified });
+    };
+    window.showDirectoryPicker = async () => ({
+      async *values() {
+        yield { kind: 'file', name: 'Playback A.wav', getFile: async () => makeWav('Playback A.wav', 4000) };
+        yield { kind: 'file', name: 'Playback B.wav', getFile: async () => makeWav('Playback B.wav', 5000) };
+      }
+    });
+    document.querySelector('#open-folder').click();
+  })()`);
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (await evaluate('[...document.querySelectorAll("#all-tracks .track-copy strong")].some(node => node.textContent.startsWith("Playback fixture"))')) break;
+    if (await evaluate('[...document.querySelectorAll("#all-tracks .track-copy strong")].filter(node => node.textContent.startsWith("Playback ")).length === 2')) break;
     await delay(50);
   }
-  await evaluate('(() => { const playbackRow = [...document.querySelectorAll("#all-tracks .track-row")].find(item => item.querySelector(".track-copy strong").textContent.startsWith("Playback fixture")); playbackRow.querySelector("button").click(); })()');
+  const playbackAPoint = await evaluate('(() => { const row = [...document.querySelectorAll("#all-tracks .track-row")].find(item => item.querySelector(".track-copy strong").textContent === "Playback A"); const bounds = row.querySelector("button").getBoundingClientRect(); return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }; })()');
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...playbackAPoint, button: 'left', clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...playbackAPoint, button: 'left', clickCount: 1 });
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await evaluate('document.querySelector("#audio-player").readyState >= 1')) break;
     await delay(50);
   }
   assert.equal(await evaluate('document.querySelector("#audio-player").readyState >= 1'), true, 'o player não carregou uma faixa WAV válida');
+  assert.equal(await evaluate(`(() => {
+    const audio = document.querySelector('#audio-player');
+    audio.currentTime = 134;
+    audio.dispatchEvent(new Event('timeupdate'));
+    return document.querySelector('#current-time').textContent;
+  })()`), '2:14', 'pré-condição do bug 02:14 não foi reproduzida no áudio real');
+  const playbackBPoint = await evaluate('(() => { const audio = document.querySelector("#audio-player"); window.__previousTestSource = audio.src; const row = [...document.querySelectorAll("#all-tracks .track-row")].find(item => item.querySelector(".track-copy strong").textContent === "Playback B"); const bounds = row.querySelector("button").getBoundingClientRect(); return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }; })()');
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...playbackBPoint, button: 'left', clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...playbackBPoint, button: 'left', clickCount: 1 });
+  const switchedPlayback = await evaluate('(() => { const audio = document.querySelector("#audio-player"); return { sourceChanged: audio.src !== window.__previousTestSource, currentTime: audio.currentTime, displayedTime: document.querySelector("#current-time").textContent, title: document.querySelector("#full-title").textContent }; })()');
+  assert.deepEqual(switchedPlayback, {
+    sourceChanged: true,
+    currentTime: 0,
+    displayedTime: '0:00',
+    title: 'Playback B'
+  }, 'a troca real deve substituir a fonte e invalidar imediatamente os 02:14');
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await evaluate('!document.querySelector("#audio-player").paused')) break;
+    await delay(50);
+  }
+  assert.equal(await evaluate('!document.querySelector("#audio-player").paused'), true, 'a segunda faixa WAV não iniciou após a troca');
+  await evaluate(`(async () => {
+    const [{ default: Library }, { default: Queue }, { default: Player }] = await Promise.all([
+      import('./js/library.js'),
+      import('./js/queue.js'),
+      import('./js/player.js')
+    ]);
+    const playbackTracks = ['Playback A', 'Playback B'].map(title => (
+      Library.getTracks().find(track => track.title === title)
+    ));
+    Queue.set(playbackTracks, 0);
+    Player.loadTrack(playbackTracks[0]);
+  })()`);
+  await delay(100);
+  assert.deepEqual(await evaluate(`(() => {
+    const audio = document.querySelector('#audio-player');
+    audio.currentTime = 134;
+    audio.dispatchEvent(new Event('timeupdate'));
+    const source = audio.src;
+    document.querySelector('#next').click();
+    return {
+      sourceChanged: audio.src !== source,
+      currentTime: audio.currentTime,
+      displayedTime: document.querySelector('#current-time').textContent,
+      title: document.querySelector('#full-title').textContent
+    };
+  })()`), {
+    sourceChanged: true,
+    currentTime: 0,
+    displayedTime: '0:00',
+    title: 'Playback B'
+  }, 'Próxima deve trocar fonte, faixa e tempo pelo mesmo fluxo confiável');
+  await delay(100);
+  assert.deepEqual(await evaluate(`(() => {
+    const audio = document.querySelector('#audio-player');
+    audio.currentTime = 0;
+    const source = audio.src;
+    document.querySelector('#prev').click();
+    return {
+      sourceChanged: audio.src !== source,
+      currentTime: audio.currentTime,
+      displayedTime: document.querySelector('#current-time').textContent,
+      title: document.querySelector('#full-title').textContent
+    };
+  })()`), {
+    sourceChanged: true,
+    currentTime: 0,
+    displayedTime: '0:00',
+    title: 'Playback A'
+  }, 'Anterior deve trocar fonte, faixa e tempo pelo mesmo fluxo confiável');
+  const coverRace = await evaluate(`(async () => {
+    const { default: Library } = await import('./js/library.js');
+    const alpha = Library.getTracks().find(track => track.title === 'Alpha');
+    const beta = Library.getTracks().find(track => track.title === 'Beta');
+    alpha.cover = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>');
+    beta.cover = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>');
+    const clickTrack = title => {
+      const row = [...document.querySelectorAll('#all-tracks .track-row')]
+        .find(item => item.querySelector('.track-copy strong').textContent === title);
+      row.querySelector('button').click();
+    };
+    clickTrack('Alpha');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const oldImage = document.querySelector('#mini-cover img');
+    clickTrack('Beta');
+    await new Promise(resolve => setTimeout(resolve, 30));
+    const currentBefore = document.querySelector('#mini-cover img')?.alt;
+    oldImage?.dispatchEvent(new Event('error'));
+    return {
+      currentBefore,
+      currentAfter: document.querySelector('#mini-cover img')?.alt,
+      state: document.querySelector('#mini-cover').dataset.coverState
+    };
+  })()`);
+  assert.deepEqual(coverRace, {
+    currentBefore: 'Capa de Beta',
+    currentAfter: 'Capa de Beta',
+    state: 'loaded'
+  }, 'um evento atrasado da capa anterior não pode apagar a capa atual');
+  await evaluate(`localStorage.setItem('lm_player_state', '{inválido'); localStorage.setItem('lm_theme', '{inválido')`);
+  await send('Page.reload', { ignoreCache: false });
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (await evaluate('document.documentElement.dataset.appReady === "true"')) break;
+    await delay(100);
+  }
+  assert.deepEqual(await evaluate(`({
+    ready: document.documentElement.dataset.appReady,
+    homeVisible: document.querySelector('#screen-home').classList.contains('active'),
+    startupErrorHidden: document.querySelector('#startup-error').hidden,
+    tracks: document.querySelector('#stat-tracks').textContent
+  })`), {
+    ready: 'true',
+    homeVisible: true,
+    startupErrorHidden: true,
+    tracks: '5'
+  }, 'persistência inválida não pode causar tela preta nem apagar a biblioteca');
+  const browserStress = await evaluate(`(async () => {
+    const { default: Library } = await import('./js/library.js');
+    window.jsmediatags = undefined;
+    const count = 5000;
+    const files = Array.from({ length: count }, (_, index) => new File(
+      ['x'],
+      'Stress ' + String(index).padStart(5, '0') + '.mp3',
+      { type: 'audio/mpeg', lastModified: index + 10000 }
+    ));
+    files.push(new File([
+      JSON.stringify({ title: '', artist: 'Teste sintético', album: 'Carga', duration: 1 })
+    ], 'track.json', { type: 'application/json' }));
+    const heapBefore = performance.memory?.usedJSHeapSize || null;
+    const importStarted = performance.now();
+    await Library.importFiles(files);
+    const importMs = performance.now() - importStarted;
+    document.querySelector('[data-go="explore"]').click();
+    document.querySelector('[data-tab="tracks"]').click();
+    const firstBatch = document.querySelectorAll('#all-tracks .track-row').length;
+    const renderStarted = performance.now();
+    const rendered = await new Promise(resolve => {
+      const deadline = performance.now() + 20000;
+      const check = () => {
+        const rows = document.querySelectorAll('#all-tracks .track-row').length;
+        if (rows === count + 5) resolve(rows);
+        else if (performance.now() >= deadline) resolve(rows);
+        else setTimeout(check, 25);
+      };
+      check();
+    });
+    return {
+      imported: Library.getTracks().length,
+      rendered,
+      firstBatch,
+      importMs: Number(importMs.toFixed(2)),
+      renderMs: Number((performance.now() - renderStarted).toFixed(2)),
+      heapBefore,
+      heapAfter: performance.memory?.usedJSHeapSize || null
+    };
+  })()`);
+  assert.equal(browserStress.imported, 5005, 'o navegador não preservou todas as faixas sintéticas');
+  assert.equal(browserStress.firstBatch, 100, 'a lista grande deve disponibilizar o primeiro lote imediatamente');
+  assert.equal(browserStress.rendered, 5005, 'a renderização incremental não concluiu 5.000 novas faixas');
+  console.log('browser-smoke.mjs métricas de 5.000 faixas:', JSON.stringify(browserStress));
   assert.deepEqual(exceptions, [], `exceções no navegador: ${exceptions.join('; ')}`);
   socket.close();
-  console.log('browser-smoke.mjs: navegação, manifest e layouts móvel/desktop passaram');
+  console.log('browser-smoke.mjs: áudio real, 02:14, próxima/anterior, persistência, capas, PWA e layouts passaram');
 } finally {
   browser.kill();
   await delay(350);

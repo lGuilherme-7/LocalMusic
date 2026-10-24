@@ -11,12 +11,17 @@ const Library = (() => {
   let tracks = [];
   let folders = new Map();
   let listeners = [];
-  let objectUrls = new Set();
-  let importRevision = 0;
+  const coverUrls = new Map();
+  let pinnedCoverTrack = null;
+  const enrichmentTasks = new WeakMap();
+  const enrichmentRevisions = new WeakMap();
+  let databaseConnection = null;
   let databasePromise = null;
   let restorePromise = null;
   let diagnostics = [];
   let lastImportReport = emptyReport();
+  const coverUrlLimit = 192;
+  const metadataConcurrency = 4;
 
   const emit = () => listeners.forEach(listener => listener(getTracks()));
   const extension = name => String(name || '').split('.').pop().toLocaleLowerCase();
@@ -31,6 +36,18 @@ const Library = (() => {
 
   function emptyReport() {
     return { imported: 0, updated: 0, skipped: 0, lyrics: 0, translations: 0, covers: 0, errors: [] };
+  }
+
+  async function runWithConcurrency(values, limit, operation) {
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < values.length) {
+        const value = values[cursor];
+        cursor += 1;
+        await operation(value);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
   }
 
   function report(level, code, message, details = {}) {
@@ -131,17 +148,47 @@ const Library = (() => {
     return track;
   }
 
-  function createObjectUrl(file) {
-    const url = URL.createObjectURL(file);
-    objectUrls.add(url);
-    return url;
+  function revokeCover(track) {
+    const url = coverUrls.get(track);
+    if (!url) return;
+    URL.revokeObjectURL(url);
+    coverUrls.delete(track);
+    if (track.cover === url) track.cover = null;
   }
 
-  function revokeCover(track) {
-    if (track?.cover && objectUrls.has(track.cover)) {
-      URL.revokeObjectURL(track.cover);
-      objectUrls.delete(track.cover);
+  function trimCoverUrls() {
+    while (coverUrls.size > coverUrlLimit) {
+      const [oldestTrack, url] = coverUrls.entries().next().value;
+      if (oldestTrack === pinnedCoverTrack) {
+        coverUrls.delete(oldestTrack);
+        coverUrls.set(oldestTrack, url);
+        continue;
+      }
+      coverUrls.delete(oldestTrack);
+      URL.revokeObjectURL(url);
+      if (oldestTrack.cover === url) oldestTrack.cover = null;
     }
+  }
+
+  function getCoverUrl(track, { pin = false } = {}) {
+    if (!track) return null;
+    if (pin) pinnedCoverTrack = track;
+    if (track.cover) {
+      if (coverUrls.has(track)) {
+        const url = coverUrls.get(track);
+        coverUrls.delete(track);
+        coverUrls.set(track, url);
+      }
+      return track.cover;
+    }
+    if (track.coverFile) {
+      const url = URL.createObjectURL(track.coverFile);
+      track.cover = url;
+      coverUrls.set(track, url);
+      trimCoverUrls();
+      return url;
+    }
+    return track.coverData || null;
   }
 
   async function getCoverInfo(file) {
@@ -185,7 +232,7 @@ const Library = (() => {
     track.coverName = file.name;
     track.coverInfo = info;
     track.coverData = null;
-    track.cover = createObjectUrl(file);
+    track.cover = null;
   }
 
   function chooseFile(current, candidate) {
@@ -225,7 +272,7 @@ const Library = (() => {
     return null;
   }
 
-  async function associateFiles(importedTracks, entries, reportData) {
+  function associateFiles(importedTracks, entries, reportData) {
     const originalLyrics = new Map();
     const translatedLyrics = new Map();
     const images = new Map();
@@ -256,13 +303,20 @@ const Library = (() => {
         reportData.translations += 1;
       }
       const covers = images.get(track) || [];
-      let cover = null;
-      for (const candidate of covers) {
-        candidate.info = await getCoverInfo(candidate.file);
-        if (!cover || coverScore(candidate.info) > coverScore(cover.info)) cover = candidate;
-      }
+      covers.forEach(candidate => {
+        candidate.info = {
+          width: 0,
+          height: 0,
+          bytes: Number(candidate.file.size) || 0,
+          type: candidate.file.type || ''
+        };
+      });
+      const cover = covers.reduce((best, candidate) => (
+        !best || coverScore(candidate.info) > coverScore(best.info) ? candidate : best
+      ), null);
       if (cover) {
         setCover(track, cover.file, cover.info);
+        track.pendingCoverCandidates = covers;
         reportData.covers += 1;
       }
     }
@@ -401,7 +455,30 @@ const Library = (() => {
     if (!existing.lyrics?.length && incoming.lyrics?.length) existing.lyrics = incoming.lyrics;
     replaceLyrics(existing, incoming, 'lyricsFile', 'lyricsFormat');
     replaceLyrics(existing, incoming, 'translationFile', 'translationFormat');
-    if (incoming.coverFile && coverScore(incoming.coverInfo) > coverScore(existing.coverInfo)) setCover(existing, incoming.coverFile, incoming.coverInfo);
+    let replacedByNewerCover = false;
+    if (incoming.coverFile) {
+      const sameCover = normalizedName(incoming.coverName) === normalizedName(existing.coverName);
+      const newerSameCover = sameCover
+        && Number(incoming.coverFile.lastModified) > Number(existing.coverFile?.lastModified || 0);
+      if (!existing.coverFile || newerSameCover || coverScore(incoming.coverInfo) > coverScore(existing.coverInfo)) {
+        setCover(existing, incoming.coverFile, incoming.coverInfo);
+        if (newerSameCover) {
+          existing.pendingCoverCandidates = [...(incoming.pendingCoverCandidates || [])];
+          replacedByNewerCover = true;
+        }
+      } else if (!incoming.pendingCoverCandidates?.length) {
+        existing.pendingCoverCandidates = [
+          ...(existing.pendingCoverCandidates || []),
+          { file: incoming.coverFile, info: incoming.coverInfo }
+        ];
+      }
+    }
+    if (incoming.pendingCoverCandidates?.length && !replacedByNewerCover) {
+      existing.pendingCoverCandidates = [
+        ...(existing.pendingCoverCandidates || []),
+        ...incoming.pendingCoverCandidates
+      ];
+    }
     return existing;
   }
 
@@ -416,23 +493,70 @@ const Library = (() => {
 
   function openDatabase() {
     if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    if (databaseConnection) return Promise.resolve(databaseConnection);
     if (databasePromise) return databasePromise;
-    databasePromise = new Promise(resolve => {
+    let pendingPromise;
+    pendingPromise = new Promise(resolve => {
+      let settled = false;
+
+      const useDatabase = database => {
+        if (!database) return null;
+        if (databaseConnection && databaseConnection !== database) {
+          database.close?.();
+          return databaseConnection;
+        }
+        databaseConnection = database;
+        const forgetDatabase = () => {
+          if (databaseConnection === database) {
+            databaseConnection = null;
+            databasePromise = null;
+          }
+        };
+        database.onversionchange = () => {
+          database.close?.();
+          forgetDatabase();
+        };
+        database.onclose = forgetDatabase;
+        return database;
+      };
+
+      const finish = database => {
+        if (settled) {
+          useDatabase(database);
+          return;
+        }
+        settled = true;
+        clearTimeout(timeout);
+        const availableDatabase = useDatabase(database);
+        resolve(availableDatabase);
+        queueMicrotask(() => {
+          if (!availableDatabase && databasePromise === pendingPromise) databasePromise = null;
+        });
+      };
+      const timeout = setTimeout(() => {
+        report('warning', 'persistence-timeout', 'O armazenamento da biblioteca demorou demais para responder.');
+        finish(null);
+      }, 5000);
       try {
         const request = indexedDB.open(databaseName, 1);
         request.onupgradeneeded = () => {
           if (!request.result.objectStoreNames.contains(storeName)) request.result.createObjectStore(storeName, { keyPath: 'id' });
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => finish(request.result);
         request.onerror = () => {
           report('warning', 'persistence-unavailable', 'O armazenamento persistente da biblioteca não está disponível.', { error: String(request.error) });
-          resolve(null);
+          finish(null);
+        };
+        request.onblocked = () => {
+          report('warning', 'persistence-blocked', 'Outra versão do aplicativo está usando o armazenamento da biblioteca.');
+          finish(null);
         };
       } catch (error) {
         report('warning', 'persistence-unavailable', 'O armazenamento persistente da biblioteca não está disponível.', { error: String(error) });
-        resolve(null);
+        finish(null);
       }
     });
+    databasePromise = pendingPromise;
     return databasePromise;
   }
 
@@ -466,54 +590,111 @@ const Library = (() => {
     track.lyricsFile = reviveFile(record.lyricsFile, record.lyricsFile?.name || 'lyrics.lrc', record.lyricsFile?.type, record.fileLastModified);
     track.translationFile = reviveFile(record.translationFile, record.translationFile?.name || 'translation.lrc', record.translationFile?.type, record.fileLastModified);
     track.identityKeys = Array.isArray(record.identityKeys) ? record.identityKeys : createIdentityKeys(track);
-    track.cover = track.coverFile ? createObjectUrl(track.coverFile) : (record.coverData || null);
+    track.cover = record.coverData || null;
     return track;
   }
 
-  async function persistTrack(track) {
+  async function persistTracks(values) {
+    if (!values.length) return true;
     const database = await openDatabase();
     if (!database) return false;
     return new Promise(resolve => {
       try {
         const transaction = database.transaction(storeName, 'readwrite');
-        transaction.objectStore(storeName).put(asStoredTrack(track));
-        transaction.oncomplete = () => resolve(true);
-        transaction.onerror = () => {
-          report('warning', 'persistence-write-failed', 'Não foi possível salvar ' + track.title + '.', { error: String(transaction.error) });
-          resolve(false);
+        const objectStore = transaction.objectStore(storeName);
+        let settled = false;
+        const finish = result => {
+          if (settled) return;
+          settled = true;
+          resolve(result);
         };
+        const fail = () => {
+          if (settled) return;
+          report('warning', 'persistence-write-failed', 'Não foi possível salvar a atualização da biblioteca.', {
+            count: values.length,
+            error: String(transaction.error)
+          });
+          finish(false);
+        };
+        values.forEach(track => objectStore.put(asStoredTrack(track)));
+        transaction.oncomplete = () => finish(true);
+        transaction.onerror = fail;
+        transaction.onabort = fail;
       } catch (error) {
-        report('warning', 'persistence-write-failed', 'Não foi possível salvar ' + track.title + '.', { error: String(error) });
+        report('warning', 'persistence-write-failed', 'Não foi possível salvar a atualização da biblioteca.', {
+          count: values.length,
+          error: String(error)
+        });
         resolve(false);
       }
     });
   }
 
+  const persistTrack = track => persistTracks([track]);
+
   async function restore() {
     if (restorePromise) return restorePromise;
-    restorePromise = (async () => {
+    const pendingRestore = (async () => {
       const database = await openDatabase();
       if (!database) return false;
       const records = await new Promise(resolve => {
+        let settled = false;
+        const finish = value => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          resolve(value);
+        };
+        const timeout = setTimeout(() => {
+          report('warning', 'persistence-read-timeout', 'A leitura da biblioteca demorou demais para responder.');
+          finish([]);
+        }, 5000);
         try {
-          const request = database.transaction(storeName, 'readonly').objectStore(storeName).getAll();
-          request.onsuccess = () => resolve(request.result || []);
+          const transaction = database.transaction(storeName, 'readonly');
+          const request = transaction.objectStore(storeName).getAll();
+          request.onsuccess = () => finish(request.result || []);
           request.onerror = () => {
+            if (settled) return;
             report('warning', 'persistence-read-failed', 'Não foi possível restaurar a biblioteca persistida.', { error: String(request.error) });
-            resolve([]);
+            finish([]);
+          };
+          transaction.onabort = () => {
+            if (settled) return;
+            report('warning', 'persistence-read-failed', 'A leitura da biblioteca persistida foi interrompida.', { error: String(transaction.error) });
+            finish([]);
           };
         } catch (error) {
           report('warning', 'persistence-read-failed', 'Não foi possível restaurar a biblioteca persistida.', { error: String(error) });
-          resolve([]);
+          finish([]);
         }
       });
       if (!records.length) return false;
-      tracks = records.map(reviveTrack).filter(track => track.file);
+      tracks = records.flatMap(record => {
+        try {
+          const track = reviveTrack(record);
+          return track.file ? [track] : [];
+        } catch (error) {
+          report('warning', 'track-restore-failed', 'Uma faixa inválida foi ignorada durante a restauração.', {
+            id: typeof record?.id === 'string' ? record.id : null,
+            error: String(error)
+          });
+          return [];
+        }
+      });
       rebuildFolders();
       emit();
       return Boolean(tracks.length);
     })();
-    return restorePromise;
+    restorePromise = pendingRestore;
+    pendingRestore.then(
+      restored => {
+        if (!restored && restorePromise === pendingRestore) restorePromise = null;
+      },
+      () => {
+        if (restorePromise === pendingRestore) restorePromise = null;
+      }
+    );
+    return pendingRestore;
   }
 
   function rebuildFolders() {
@@ -545,8 +726,7 @@ const Library = (() => {
       ensureUniqueId(track, usedIds);
       return track;
     });
-    await associateFiles(importedTracks, entries, reportData);
-    const revision = ++importRevision;
+    associateFiles(importedTracks, entries, reportData);
     const changed = [];
     importedTracks.forEach(incoming => {
       const existing = findExisting(incoming, tracks);
@@ -560,10 +740,10 @@ const Library = (() => {
       }
     });
     rebuildFolders();
-    await Promise.all(changed.map(persistTrack));
+    await persistTracks(changed);
     lastImportReport = reportData;
     emit();
-    void enrichMetadata(revision, changed);
+    void enrichMetadata(changed);
     return true;
   }
 
@@ -585,28 +765,71 @@ const Library = (() => {
     return entries === null ? false : importEntries(entries);
   }
 
-  async function enrichMetadata(revision, importedTracks) {
-    for (const track of importedTracks) {
-      if (revision !== importRevision) return;
+  async function inspectPendingCovers(track, revision) {
+    const candidates = track.pendingCoverCandidates || [];
+    if (!candidates.length) return;
+    const inspected = await Promise.all(candidates.map(async candidate => ({
+      file: candidate.file,
+      info: await getCoverInfo(candidate.file)
+    })));
+    if (enrichmentRevisions.get(track) !== revision) return;
+    delete track.pendingCoverCandidates;
+    const best = inspected.reduce((winner, candidate) => (
+      !winner || coverScore(candidate.info) > coverScore(winner.info) ? candidate : winner
+    ), null);
+    if (best && (!track.coverFile || coverScore(best.info) >= coverScore(track.coverInfo))) {
+      if (track.coverFile !== best.file) setCover(track, best.file, best.info);
+      else track.coverInfo = best.info;
+    }
+  }
+
+  function ensureMetadata(track, { refresh = false, persist = true } = {}) {
+    if (!track?.file) return Promise.resolve(false);
+    const running = enrichmentTasks.get(track);
+    if (running && !refresh) return running;
+    const revision = (enrichmentRevisions.get(track) || 0) + 1;
+    enrichmentRevisions.set(track, revision);
+    const task = (async () => {
       try {
+        await inspectPendingCovers(track, revision);
         const metadata = await Metadata.extract(track.file);
+        if (enrichmentRevisions.get(track) !== revision) return false;
         const metadataTitle = clean(metadata.title);
         if (track.title === displayBaseName(track.fileName) && metadataTitle && normalizedName(metadataTitle) !== normalizedName(baseName(track.fileName))) {
           track.title = metadataTitle;
         }
         if (track.artist === 'Artista desconhecido') track.artist = clean(metadata.artist, track.artist);
         if (track.album === 'Álbum desconhecido') track.album = clean(metadata.album, track.album);
-        if (!track.cover && metadata.cover) {
+        if (!track.coverFile && !track.coverData && metadata.cover) {
           track.cover = metadata.cover;
           track.coverData = metadata.cover;
         }
         if (!track.duration) track.duration = await Metadata.getDuration(track.file);
-        await persistTrack(track);
+        if (enrichmentRevisions.get(track) !== revision) return false;
+        if (persist) await persistTrack(track);
+        return true;
       } catch (error) {
-        report('warning', 'metadata-read-failed', 'Não foi possível ler os metadados de ' + track.fileName + '.', { error: String(error) });
+        report('warning', 'metadata-read-failed', 'Não foi possível ler os metadados de ' + track.fileName + '.', {
+          error: String(error)
+        });
+        return false;
       }
-    }
-    if (revision === importRevision) emit();
+    })();
+    enrichmentTasks.set(track, task);
+    task.finally(() => {
+      if (enrichmentTasks.get(track) === task) enrichmentTasks.delete(track);
+    });
+    return task;
+  }
+
+  async function enrichMetadata(importedTracks) {
+    await runWithConcurrency(
+      importedTracks,
+      metadataConcurrency,
+      track => ensureMetadata(track, { refresh: true, persist: false })
+    );
+    await persistTracks(importedTracks);
+    emit();
   }
 
   const getTracks = () => [...tracks];
@@ -622,10 +845,17 @@ const Library = (() => {
     const albums = new Map();
     tracks.forEach(track => {
       const key = track.album + '|' + track.artist;
-      if (!albums.has(key)) albums.set(key, { name: track.album, artist: track.artist, cover: track.cover, count: 0 });
+      if (!albums.has(key)) {
+        albums.set(key, {
+          name: track.album,
+          artist: track.artist,
+          coverSourceTrack: track.cover || track.coverFile || track.coverData ? track : null,
+          count: 0
+        });
+      }
       const album = albums.get(key);
       album.count += 1;
-      if (!album.cover && track.cover) album.cover = track.cover;
+      if (!album.coverSourceTrack && (track.cover || track.coverFile || track.coverData)) album.coverSourceTrack = track;
     });
     return [...albums.values()];
   }
@@ -647,14 +877,14 @@ const Library = (() => {
   function recordPlay(id) {
     const track = getTrackById(id);
     if (!track) return;
-    track.playCount += 1;
+    track.playCount = (Number(track.playCount) || 0) + 1;
     track.lastPlayed = new Date().toISOString();
     void persistTrack(track);
   }
 
   return {
     openFolder, importFiles, restore, onUpdate, getTracks, getTrackById, getAlbums, getArtists, getFolders, getStats,
-    getLastImportReport, getDiagnostics, recordPlay
+    getLastImportReport, getDiagnostics, getCoverUrl, ensureMetadata, recordPlay
   };
 })();
 

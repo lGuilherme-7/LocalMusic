@@ -24,6 +24,17 @@ function join(parts) {
   return output;
 }
 
+function crc32(bytes) {
+  let checksum = 0xffffffff;
+  for (const byte of bytes) {
+    checksum ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      checksum = (checksum >>> 1) ^ (0xedb88320 & -(checksum & 1));
+    }
+  }
+  return (checksum ^ 0xffffffff) >>> 0;
+}
+
 function storedZip(entries) {
   const local = [];
   const central = [];
@@ -31,14 +42,15 @@ function storedZip(entries) {
   entries.forEach(entry => {
     const name = encoder.encode(entry.name);
     const content = encoder.encode(entry.content);
+    const checksum = crc32(content);
     const header = join([
-      Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), bytes16(20), bytes16(0), bytes16(0), bytes16(0), bytes16(0), bytes32(0),
+      Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), bytes16(20), bytes16(0), bytes16(0), bytes16(0), bytes16(0), bytes32(checksum),
       bytes32(content.length), bytes32(content.length), bytes16(name.length), bytes16(0), name, content
     ]);
     local.push(header);
     central.push(join([
       Uint8Array.from([0x50, 0x4b, 0x01, 0x02]), bytes16(20), bytes16(20), bytes16(0), bytes16(0), bytes16(0), bytes16(0),
-      bytes32(0), bytes32(content.length), bytes32(content.length), bytes16(name.length), bytes16(0), bytes16(0),
+      bytes32(checksum), bytes32(content.length), bytes32(content.length), bytes16(name.length), bytes16(0), bytes16(0),
       bytes16(0), bytes16(0), bytes32(0), bytes32(offset), name
     ]));
     offset += header.length;
@@ -67,6 +79,12 @@ assert.equal(await entries[1].file.text(), '[00:01.00]Verse');
 const unsafe = new File([storedZip([{ name: '../outside.mp3', content: 'ID3audio' }])], 'unsafe.zip', { type: 'application/zip' });
 await assert.rejects(() => readZipEntries(unsafe), /caminho inseguro/);
 
+const corruptedName = encoder.encode('corrompida.mp3');
+const corruptedBytes = storedZip([{ name: 'corrompida.mp3', content: 'ID3audio' }]);
+corruptedBytes[30 + corruptedName.length] ^= 0xff;
+const corrupted = new File([corruptedBytes], 'corrompido.zip', { type: 'application/zip' });
+await assert.rejects(() => readZipEntries(corrupted), /verificação de integridade/);
+
 globalThis.window = {};
 globalThis.document = {
   createElement() {
@@ -90,4 +108,4 @@ assert.equal(track.lyricsFile.name.endsWith('.lrc'), true);
 assert.equal(track.translationFile.name.endsWith('.pt-BR.lrc'), true);
 assert.equal(track.coverFile.name, '_RVCDKS5D4c.jpg');
 
-console.log('zip-import.test.mjs: ZIP, subpastas, associação Nexo e proteção contra traversal passaram');
+console.log('zip-import.test.mjs: ZIP, associação Nexo, CRC e proteção contra traversal passaram');

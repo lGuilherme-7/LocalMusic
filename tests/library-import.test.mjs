@@ -50,7 +50,7 @@ const [track] = Library.getTracks();
 assert.equal(track.id, 'track-stable-id');
 assert.equal(track.title, 'Faixa de teste');
 assert.equal(track.audio, 'audio.mp3');
-assert.ok(track.cover.startsWith('blob:'), 'capa auxiliar não foi associada');
+assert.ok(Library.getCoverUrl(track).startsWith('blob:'), 'capa auxiliar não foi associada sob demanda');
 assert.equal(track.lyricsFile.name, 'audio.srt');
 assert.equal(track.lyrics[0].translation.text, 'Line');
 assert.deepEqual(Library.getFolders()[0].tracks, ['track-stable-id']);
@@ -73,11 +73,13 @@ assert.equal(imported.translationFile.name, 'Use Your Heart (Interlude) [_RVCDKS
 assert.equal(imported.coverFile.name, '_RVCDKS5D4c.jpg');
 
 const revisedLyrics = new File(['[00:17.539]Use your heart again'], 'Use Your Heart (Interlude) [_RVCDKS5D4c].lrc', { type: 'text/plain', lastModified: 3000 });
-const highQualityCover = new File(['cover-higher-quality-with-more-bytes'], '_RVCDKS5D4c.jpg', { type: 'image/jpeg', lastModified: 3000 });
-assert.equal(await Library.importFiles([nexoFiles[0], revisedLyrics, highQualityCover]), true, 'reimportação da mesma faixa deve funcionar');
+const updatedCover = new File(['nova'], '_RVCDKS5D4c.jpg', { type: 'image/jpeg', lastModified: 3000 });
+assert.equal(await Library.importFiles([nexoFiles[0], revisedLyrics, updatedCover]), true, 'reimportação da mesma faixa deve funcionar');
 const afterReimport = Library.getTracks().filter(item => item.referenceId === '_RVCDKS5D4c');
 assert.equal(afterReimport.length, 1, 'reimportação não pode duplicar a faixa');
 assert.equal(await afterReimport[0].lyricsFile.text(), '[00:17.539]Use your heart again', 'letra atualizada não foi preservada');
-assert.equal(afterReimport[0].coverFile.size, highQualityCover.size, 'capa de qualidade comprovadamente maior não foi atualizada');
+assert.equal(afterReimport[0].coverFile.size, updatedCover.size, 'capa mais nova e melhor comprimida não foi atualizada');
+await Library.ensureMetadata(afterReimport[0]);
+assert.equal(afterReimport[0].coverFile.size, updatedCover.size, 'o enriquecimento tardio não pode restaurar a capa antiga');
 
 console.log('library-import.test.mjs: importação, associação Nexo, atualização e seleção vazia passaram');

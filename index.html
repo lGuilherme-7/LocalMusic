@@ -21,6 +21,28 @@
       } catch {
         document.documentElement.dataset.theme = 'dark';
       }
+      window.__localMusicStartupFailed = error => {
+        if (document.documentElement.dataset.appReady === 'true') return;
+        const showError = () => {
+          const panel = document.getElementById('startup-error');
+          if (panel) panel.hidden = false;
+        };
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', showError, { once: true });
+        } else {
+          showError();
+        }
+        if (error) console.error('Local Music: inicialização interrompida.', error);
+      };
+      window.addEventListener('error', event => {
+        const source = event.target?.src || '';
+        if (event.error || source.endsWith('/js/app.js')) {
+          window.__localMusicStartupFailed(event.error || new Error('O módulo principal não foi carregado.'));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', event => {
+        window.__localMusicStartupFailed(event.reason);
+      });
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,6 +66,11 @@
             </div>
             <button class="icon-button" id="open-folder" type="button" aria-label="Abrir biblioteca"><i class="icon fa-solid fa-folder-open" aria-hidden="true"></i></button>
           </header>
+          <div id="startup-error" class="startup-error" role="alert" hidden>
+            <strong>Não foi possível iniciar o Local Music.</strong>
+            <p>Seus dados continuam preservados. Recarregue o app para tentar novamente.</p>
+            <button class="secondary-button" type="button" onclick="location.reload()">Tentar novamente</button>
+          </div>
           <div id="home-empty" class="empty-state">
             <span class="empty-disc"><i class="icon icon-large fa-solid fa-music" aria-hidden="true"></i></span>
             <h1>Sua música,<br>do seu jeito.</h1>

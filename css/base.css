@@ -284,6 +284,17 @@ section+section {
   height:100%;
   object-fit:cover
 }
+.cover-loading .icon {
+  animation:cover-pulse 1.2s ease-in-out infinite
+}
+.cover-error {
+  color:var(--text-secondary)
+}
+@keyframes cover-pulse {
+  50% {
+    opacity:.45
+  }
+}
 .cover-large {
   width:96px;
   height:96px;

@@ -14,11 +14,12 @@ const Metadata = (() => {
    */
   function _pictureToDataURL(picture) {
     const bytes = new Uint8Array(picture.data);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const chunks = [];
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
     }
-    return `data:${picture.format};base64,${btoa(binary)}`;
+    return `data:${picture.format};base64,${btoa(chunks.join(''))}`;
   }
 
   /**
@@ -44,18 +45,27 @@ const Metadata = (() => {
         return;
       }
 
+      let settled = false;
+      const finish = metadata => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolve(metadata);
+      };
+      const timeout = setTimeout(() => finish(_fallback(file)), 8000);
       window.jsmediatags.read(file, {
         onSuccess(tag) {
+          if (settled) return;
           const t = tag.tags;
           const title  = (t.title  && t.title.trim())  || _nameFromFile(file.name);
           const artist = (t.artist && t.artist.trim()) || 'Artista desconhecido';
           const album  = (t.album  && t.album.trim())  || 'Álbum desconhecido';
           const cover  = (t.picture) ? _pictureToDataURL(t.picture) : null;
 
-          resolve({ title, artist, album, cover, duration: 0 });
+          finish({ title, artist, album, cover, duration: 0 });
         },
         onError() {
-          resolve(_fallback(file));
+          finish(_fallback(file));
         }
       });
     });
@@ -91,16 +101,23 @@ const Metadata = (() => {
         : file;
       const url   = URL.createObjectURL(playable);
       const audio = new Audio();
+      let settled = false;
+      const finish = duration => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        audio.removeAttribute?.('src');
+        audio.load?.();
+        URL.revokeObjectURL(url);
+        resolve(duration);
+      };
+      const timeout = setTimeout(() => finish(0), 10000);
       audio.preload = 'metadata';
       audio.onloadedmetadata = () => {
         const dur = isFinite(audio.duration) ? audio.duration : 0;
-        URL.revokeObjectURL(url);
-        resolve(dur);
+        finish(dur);
       };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(0);
-      };
+      audio.onerror = () => finish(0);
       audio.src = url;
     });
   }

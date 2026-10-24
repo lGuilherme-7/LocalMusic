@@ -15,6 +15,7 @@ const themeColors = Object.freeze({ light: '#f8f7fb', dark: '#0b0811' });
 const iconClasses = Object.freeze({
   play: ['fa-solid', 'fa-play'],
   pause: ['fa-solid', 'fa-pause'],
+  spinner: ['fa-solid', 'fa-spinner', 'fa-spin'],
   folder: ['fa-solid', 'fa-folder-open'],
   music: ['fa-solid', 'fa-music'],
   home: ['fa-solid', 'fa-house'],
@@ -68,6 +69,21 @@ let pendingContext = null;
 let queueRestored = false;
 let toastTimer = null;
 let deferredInstallPrompt = null;
+let currentCoverKey = null;
+let exploreRenderRevision = 0;
+const coverRevisions = new WeakMap();
+const observedCovers = new Set();
+
+const coverObserver = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      coverObserver.unobserve(entry.target);
+      observedCovers.delete(entry.target);
+      entry.target.__loadLocalMusicCover?.();
+    });
+  }, { rootMargin: '320px 0px' })
+  : null;
 
 const isStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 
@@ -89,20 +105,69 @@ window.addEventListener('appinstalled', () => {
   toast('Local Music foi instalado.');
 });
 
-function cover(element, track, large = false) {
+function cleanupCoverObservers() {
+  observedCovers.forEach(element => {
+    if (element.isConnected) return;
+    coverObserver?.unobserve(element);
+    observedCovers.delete(element);
+  });
+}
+
+function cover(element, track, large = false, priority = false) {
   if (!element) return;
+  coverObserver?.unobserve(element);
+  observedCovers.delete(element);
+  const revision = (coverRevisions.get(element) || 0) + 1;
+  coverRevisions.set(element, revision);
   element.replaceChildren();
   element.classList.toggle('cover-large', large);
-  if (!track?.cover) {
-    element.append(icon('music'));
+  element.classList.remove('cover-loading', 'cover-error');
+  element.removeAttribute('aria-busy');
+  element.append(icon('music'));
+  const sourceTrack = track?.coverSourceTrack || track;
+  if (!sourceTrack || (!sourceTrack.cover && !sourceTrack.coverFile && !sourceTrack.coverData)) {
+    element.dataset.coverState = 'missing';
     return;
   }
-  const image = new Image();
-  image.alt = `Capa de ${text(track.title || track.name, 'música')}`;
-  image.loading = 'lazy';
-  image.src = track.cover;
-  image.addEventListener('error', () => setIcon(element, 'music'), { once: true });
-  element.append(image);
+  element.dataset.coverState = 'loading';
+  element.classList.add('cover-loading');
+  element.setAttribute('aria-busy', 'true');
+  element.__loadLocalMusicCover = () => {
+    if (coverRevisions.get(element) !== revision) return;
+    const source = Library.getCoverUrl(sourceTrack, { pin: priority });
+    if (!source) {
+      element.dataset.coverState = 'missing';
+      element.classList.remove('cover-loading');
+      element.removeAttribute('aria-busy');
+      return;
+    }
+    const image = new Image();
+    image.alt = `Capa de ${text(track.title || track.name, 'música')}`;
+    image.loading = priority ? 'eager' : 'lazy';
+    image.decoding = 'async';
+    if (priority) image.fetchPriority = 'high';
+    image.addEventListener('load', () => {
+      if (coverRevisions.get(element) !== revision) return;
+      element.replaceChildren(image);
+      element.dataset.coverState = 'loaded';
+      element.classList.remove('cover-loading', 'cover-error');
+      element.removeAttribute('aria-busy');
+    }, { once: true });
+    image.addEventListener('error', () => {
+      if (coverRevisions.get(element) !== revision) return;
+      element.dataset.coverState = 'error';
+      element.classList.remove('cover-loading');
+      element.classList.add('cover-error');
+      element.removeAttribute('aria-busy');
+    }, { once: true });
+    image.src = source;
+  };
+  if (priority || !coverObserver) {
+    element.__loadLocalMusicCover();
+  } else {
+    observedCovers.add(element);
+    coverObserver.observe(element);
+  }
 }
 
 function toast(message) {
@@ -222,6 +287,29 @@ function mediaCard(track, context) {
   return button;
 }
 
+function coverKey(track) {
+  if (!track) return '';
+  if (track.coverFile) {
+    return [
+      track.coverName || track.coverFile.name,
+      track.coverFile.size,
+      track.coverFile.lastModified
+    ].join(':');
+  }
+  if (track.coverData) return `data:${track.coverData.length}`;
+  return track.cover || '';
+}
+
+function updateCurrentCovers(track, force = false) {
+  const nextKey = coverKey(track);
+  if (!force && nextKey === currentCoverKey) return;
+  currentCoverKey = nextKey;
+  cover($('mini-cover'), track, false, true);
+  cover($('full-cover'), track, false, true);
+  cover($('lyrics-cover'), track, false, true);
+  MediaSession.updateTrack(track);
+}
+
 function homePlaylistCard(playlist) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -261,6 +349,7 @@ function renderHome() {
   $('recent-tracks').replaceChildren(...recent.map(track => mediaCard(track, tracks)));
   const playlists = [{ id: 'favorites', name: 'Favoritos', readOnly: true }, ...allPlaylists()];
   $('home-playlists').replaceChildren(...playlists.map(homePlaylistCard));
+  cleanupCoverObservers();
 }
 
 function normalized(value) {
@@ -282,20 +371,53 @@ function filteredTracks() {
   return result;
 }
 
+function renderIncrementally(container, values, createElement, revision, emptyMessage = '') {
+  container.replaceChildren();
+  if (!values.length) {
+    if (emptyMessage) container.append(emptyList(emptyMessage));
+    return;
+  }
+  let cursor = 0;
+  const appendBatch = () => {
+    if (revision !== exploreRenderRevision || !container.isConnected) return;
+    const fragment = document.createDocumentFragment();
+    const end = Math.min(cursor + 100, values.length);
+    while (cursor < end) {
+      fragment.append(createElement(values[cursor], cursor));
+      cursor += 1;
+    }
+    container.append(fragment);
+    cleanupCoverObservers();
+    if (cursor < values.length) {
+      const schedule = window.requestIdleCallback
+        ? callback => window.requestIdleCallback(callback, { timeout: 120 })
+        : callback => setTimeout(callback, 0);
+      schedule(appendBatch);
+    }
+  };
+  appendBatch();
+}
+
 function renderExplore() {
+  const revision = ++exploreRenderRevision;
   const tracks = filteredTracks();
   syncSearchControls();
-  $('all-tracks').replaceChildren(...tracks.map(track => renderTrackRow(track, tracks)));
-  if (!tracks.length) $('all-tracks').append(emptyList('Nenhuma música encontrada.'));
+  renderIncrementally(
+    $('all-tracks'),
+    tracks,
+    track => renderTrackRow(track, tracks),
+    revision,
+    'Nenhuma música encontrada.'
+  );
   const query = normalized($('search-input').value.trim());
   const albums = Library.getAlbums().filter(album => !query || normalized(album.name).includes(query) || normalized(album.artist).includes(query));
-  $('albums').replaceChildren(...albums.map(album => {
+  renderIncrementally($('albums'), albums, album => {
     const button = mediaCard(album);
     button.className = 'album-card';
     return button;
-  }));
+  }, revision);
   const artists = Library.getArtists().filter(artist => !query || normalized(artist.name).includes(query));
-  $('artists').replaceChildren(...artists.map(artist => {
+  renderIncrementally($('artists'), artists, artist => {
     const item = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
@@ -308,7 +430,7 @@ function renderExplore() {
     button.addEventListener('click', () => filterByArtist(artist.name));
     item.append(button);
     return item;
-  }));
+  }, revision);
 }
 
 function syncSearchControls() {
@@ -409,9 +531,7 @@ async function updatePlayer(track) {
   if (!track) return;
   const lyricsRevision = ++lyricLoadRevision;
   $('mini-player').hidden = false;
-  cover($('mini-cover'), track);
-  cover($('full-cover'), track);
-  cover($('lyrics-cover'), track);
+  updateCurrentCovers(track, true);
   $('mini-title').textContent = text(track.title);
   $('mini-artist').textContent = text(track.artist, 'Artista desconhecido');
   $('full-title').textContent = text(track.title);
@@ -420,6 +540,17 @@ async function updatePlayer(track) {
   $('lyrics-artist').textContent = text(track.artist, 'Artista desconhecido');
   updateFavoriteButton(track);
   Library.recordPlay(track.id);
+  void Library.ensureMetadata(track, { refresh: true }).then(updated => {
+    if (!updated || Player.getCurrentTrack()?.id !== track.id) return;
+    $('mini-title').textContent = text(track.title);
+    $('mini-artist').textContent = text(track.artist, 'Artista desconhecido');
+    $('full-title').textContent = text(track.title);
+    $('full-artist').textContent = text(track.artist, 'Artista desconhecido');
+    $('lyrics-title').textContent = text(track.title);
+    $('lyrics-artist').textContent = text(track.artist, 'Artista desconhecido');
+    updateCurrentCovers(track, true);
+    renderHome();
+  });
   const lyricResult = await Lyrics.loadWithStatus(track);
   if (lyricsRevision !== lyricLoadRevision || Player.getCurrentTrack()?.id !== track.id) return;
   currentLyrics = lyricResult.lines;
@@ -451,10 +582,13 @@ function renderPlayingRows() {
 }
 
 function updatePlayState() {
+  const state = Player.getState();
   const playing = Player.isPlaying();
+  const loading = state === 'loading';
   ['toggle-play', 'toggle-play-full', 'toggle-play-lyrics'].forEach(id => {
-    setIcon($(id), playing ? 'pause' : 'play');
-    $(id).setAttribute('aria-label', playing ? 'Pausar' : 'Reproduzir');
+    setIcon($(id), loading ? 'spinner' : playing ? 'pause' : 'play');
+    $(id).setAttribute('aria-label', loading ? 'Carregando música' : playing ? 'Pausar' : 'Reproduzir');
+    $(id).setAttribute('aria-busy', String(loading));
   });
 }
 
@@ -1044,9 +1178,46 @@ function applyTheme(theme) {
 
 function renderAll() {
   renderHome();
-  renderExplore();
   renderPlaylists();
   renderProfile();
+  if ($('screen-explore').classList.contains('active')) renderExplore();
+  if (!$('playlist-detail').hidden && currentPlaylist) renderPlaylistDetail();
+}
+
+function handleFatalStartup(error) {
+  console.error('Local Music: falha durante a inicialização.', error);
+  window.__localMusicStartupFailed?.(error);
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshing = false;
+  try {
+    if (sessionStorage.getItem('lm_sw_reload_pending') === '1') {
+      sessionStorage.removeItem('lm_sw_reload_pending');
+    }
+  } catch {
+    // sessionStorage é opcional para a recuperação da atualização.
+  }
+  if (hadController) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        sessionStorage.setItem('lm_sw_reload_pending', '1');
+      } catch {
+        // A atualização continua válida mesmo sem sessionStorage.
+      }
+      location.reload();
+    }, { once: true });
+  }
+  try {
+    const registration = await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+    void registration.update().catch(() => {});
+  } catch (error) {
+    console.warn('Local Music: o modo offline não pôde ser atualizado.', error);
+  }
 }
 
 async function init() {
@@ -1062,6 +1233,8 @@ async function init() {
       updateModeButtons();
     }
     renderAll();
+    const currentTrack = Player.getCurrentTrack();
+    if (currentTrack) updateCurrentCovers(currentTrack);
   });
   Player.onTrack(updatePlayer);
   Player.onPlay(() => {
@@ -1072,18 +1245,40 @@ async function init() {
     updatePlayState();
     stopLyricsAnimation();
   });
+  Player.onState(updatePlayState);
   Player.onTime(updateTime);
   Player.onSeek(time => {
     setLyricsAutoScroll(true);
     updateLyricsTime(time, { immediate: true, force: true });
   });
-  Player.onError(() => toast('Este arquivo não pôde ser reproduzido neste navegador.'));
+  Player.onPlaybackBlocked(() => {
+    toast('Toque em reproduzir para continuar esta música.');
+  });
+  Player.onError((error, context) => {
+    console.warn('Local Music player:', context?.operation || 'media', {
+      trackId: context?.track?.id || Player.getCurrentTrack()?.id || null,
+      name: error?.name || 'MediaError'
+    });
+    toast('Não foi possível reproduzir esta música. Tente novamente ou avance para a próxima.');
+  });
   MediaSession.setup(Player);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js', { scope: './' }).catch(() => {});
+  void registerServiceWorker();
   renderAll();
-  await Library.restore();
+  try {
+    await Library.restore();
+  } catch (error) {
+    console.warn('Local Music: não foi possível restaurar a biblioteca.', error);
+    toast('Ocorreu um problema ao abrir a biblioteca. Você pode tentar novamente recarregando o app.');
+  }
   renderAll();
+  $('startup-error').hidden = true;
+  document.documentElement.dataset.appReady = 'true';
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
-else init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    void init().catch(handleFatalStartup);
+  }, { once: true });
+} else {
+  void init().catch(handleFatalStartup);
+}

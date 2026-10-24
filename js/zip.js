@@ -27,6 +27,21 @@ const mimeByExtension = Object.freeze({
 });
 
 const decoder = new TextDecoder('utf-8', { fatal: false });
+const crc32Table = Uint32Array.from({ length: 256 }, (_, value) => {
+  let checksum = value;
+  for (let bit = 0; bit < 8; bit += 1) {
+    checksum = (checksum >>> 1) ^ (0xedb88320 & -(checksum & 1));
+  }
+  return checksum >>> 0;
+});
+
+function crc32(bytes) {
+  let checksum = 0xffffffff;
+  for (const byte of bytes) {
+    checksum = (checksum >>> 8) ^ crc32Table[(checksum ^ byte) & 0xff];
+  }
+  return (checksum ^ 0xffffffff) >>> 0;
+}
 
 function extension(name) {
   return String(name).split('.').pop().toLowerCase();
@@ -110,6 +125,7 @@ export async function readZipEntries(archive) {
 
     const flags = view.getUint16(offset + 8, true);
     const method = view.getUint16(offset + 10, true);
+    const expectedChecksum = view.getUint32(offset + 16, true);
     const compressedSize = view.getUint32(offset + 20, true);
     const uncompressedSize = view.getUint32(offset + 24, true);
     const nameLength = view.getUint16(offset + 28, true);
@@ -141,6 +157,9 @@ export async function readZipEntries(archive) {
     const content = method === 0 ? compressed : await inflate(compressed, MAX_ENTRY_BYTES);
     if (content.byteLength !== uncompressedSize || content.byteLength > MAX_ENTRY_BYTES) {
       throw new Error(`O tamanho descompactado de ${path} é inválido.`);
+    }
+    if (crc32(content) !== expectedChecksum) {
+      throw new Error(`A verificação de integridade de ${path} falhou.`);
     }
 
     entries.push({
