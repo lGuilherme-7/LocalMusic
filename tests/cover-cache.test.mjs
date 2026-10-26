@@ -31,6 +31,12 @@ try {
 
   const recreated = Library.getCoverUrl(tracks[1]);
   assert.notEqual(recreated, revoked[0], 'uma capa expulsa deve ser recriada sob demanda');
+
+  const revokedExternally = tracks[2];
+  const staleUrl = Library.getCoverUrl(revokedExternally);
+  const refreshedUrl = Library.refreshCoverUrl(revokedExternally, staleUrl);
+  assert.notEqual(refreshedUrl, staleUrl, 'uma Blob URL inválida deve ser recriada sem descartar a capa válida');
+  assert.equal(revoked.includes(staleUrl), true);
 } finally {
   URL.createObjectURL = originalCreateObjectUrl;
   URL.revokeObjectURL = originalRevokeObjectUrl;

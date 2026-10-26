@@ -53,9 +53,6 @@
   .playlist-row {
     grid-template-columns:repeat(3,1fr)
   }
-  .player-dialog {
-    min-height:100vh
-  }
   .sheet {
     margin:auto;
     border-radius:24px;

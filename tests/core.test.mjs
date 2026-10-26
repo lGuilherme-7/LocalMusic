@@ -73,4 +73,18 @@ assert.equal(repaired.length, 2, 'playlists válidas não são descartadas duran
 assert.equal(new Set(repaired.map(item => item.id)).size, 2, 'IDs duplicados são reparados na persistência');
 assert.deepEqual(repaired[0].tracks, ['a'], 'faixas duplicadas são normalizadas na origem');
 
+const removedId = repaired[0].id;
+assert.equal(Playlists.remove(removedId), true);
+const staleState = [...repaired];
+memory.set('lm_playlists', JSON.stringify(staleState));
+assert.equal(Playlists.getById(removedId), undefined, 'uma gravação legada não pode ressuscitar playlist excluída');
+assert.equal(Playlists.hideCollection('folder_antiga'), true);
+assert.equal(Playlists.isCollectionHidden('folder_antiga'), true, 'coleção importada ocultada deve permanecer oculta');
+
+const validPlaylist = Playlists.create('Referências');
+Playlists.addTrack(validPlaylist.id, 'a');
+Playlists.addTrack(validPlaylist.id, 'arquivo-removido');
+assert.equal(Playlists.removeOrphanedTrackReferences(new Set(['a'])), 2);
+assert.deepEqual(Playlists.getById(validPlaylist.id).tracks, ['a'], 'referências órfãs devem sair sem apagar a playlist');
+
 console.log('core.test.mjs: todos os testes passaram');

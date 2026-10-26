@@ -42,8 +42,10 @@ const Storage = (() => {
   function set(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      return true;
     } catch (error) {
       warnOnce('salvar dados locais', error);
+      return false;
     }
   }
 
@@ -54,8 +56,10 @@ const Storage = (() => {
   function remove(key) {
     try {
       localStorage.removeItem(key);
+      return true;
     } catch (error) {
       warnOnce('remover dados locais', error);
+      return false;
     }
   }
 

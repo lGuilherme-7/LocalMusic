@@ -159,8 +159,14 @@ try {
 
   await evaluate(`window.showDirectoryPicker = async () => ({
     async *values() {
-      yield { kind: 'file', name: 'Alpha.mp3', getFile: async () => new File(['alpha'], 'Alpha.mp3', { type: 'audio/mpeg', lastModified: 1000 }) };
-      yield { kind: 'file', name: 'Beta.mp3', getFile: async () => new File(['beta'], 'Beta.mp3', { type: 'audio/mpeg', lastModified: 2000 }) };
+      yield { kind: 'directory', name: 'Alpha', async *values() {
+        yield { kind: 'file', name: 'Alpha.mp3', getFile: async () => new File(['alpha'], 'Alpha.mp3', { type: 'audio/mpeg', lastModified: 1000 }) };
+        yield { kind: 'file', name: 'track.json', getFile: async () => new File([JSON.stringify({ id: 'alpha-id', title: 'Alpha', artist: 'Browser Artist', album: 'Browser Album', albumArtist: 'Browser Artist', releaseId: 'browser-release', trackNumber: 1, year: 2026 })], 'track.json', { type: 'application/json' }) };
+      } };
+      yield { kind: 'directory', name: 'Beta', async *values() {
+        yield { kind: 'file', name: 'Beta.mp3', getFile: async () => new File(['beta'], 'Beta.mp3', { type: 'audio/mpeg', lastModified: 2000 }) };
+        yield { kind: 'file', name: 'track.json', getFile: async () => new File([JSON.stringify({ id: 'beta-id', title: 'Beta', artist: 'Browser Artist', album: 'Browser Album', albumArtist: 'Browser Artist', releaseId: 'browser-release', trackNumber: 2, year: 2026 })], 'track.json', { type: 'application/json' }) };
+      } };
     }
   }); document.querySelector('#open-folder-empty').click()`);
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -236,6 +242,23 @@ try {
     assert.equal(visible, true, `falha ao abrir aba ${tab}`);
   }
   assert.equal(await evaluate("document.querySelectorAll('#albums .album-card').length > 0"), true, 'Álbuns devem permanecer em Explorar');
+  assert.deepEqual(await evaluate(`(() => {
+    document.querySelector('#albums .album-card').click();
+    return {
+      visible: !document.querySelector('#album-detail').hidden,
+      title: document.querySelector('#album-title').textContent,
+      artist: document.querySelector('#album-artist').textContent,
+      tracks: document.querySelectorAll('#album-tracks .track-row').length,
+      overviewHidden: document.querySelector('#tab-albums').hidden
+    };
+  })()`), {
+    visible: true,
+    title: 'Browser Album',
+    artist: 'Browser Artist',
+    tracks: 2,
+    overviewHidden: true
+  }, 'página de álbum deve mostrar somente as faixas disponíveis');
+  await evaluate("document.querySelector('#close-album').click()");
 
   const searchRegression = await evaluate(`(() => {
     const input = document.querySelector('#search-input');
@@ -325,6 +348,27 @@ try {
   assert.deepEqual(exceptions, [], `exceções antes do fluxo de playlist: ${exceptions.join('; ')}`);
   assert.deepEqual(playlistRegression, { cards: 1, gap: 12, title: 'Playlist de teste', details: 1 }, 'playlists devem abrir uma vez, com o nome correto e espaçamento vertical real');
   await evaluate("document.querySelector('#close-playlist').click()");
+  assert.deepEqual(await evaluate(`(() => {
+    document.querySelector('#create-playlist').click();
+    document.querySelector('#playlist-input').value = 'Excluir depois';
+    document.querySelector('#playlist-save').click();
+    [...document.querySelectorAll('#playlists [data-playlist]')]
+      .find(card => card.textContent.includes('Excluir depois')).click();
+    const nativeConfirm = window.confirm;
+    window.confirm = () => true;
+    document.querySelector('#delete-playlist').click();
+    window.confirm = nativeConfirm;
+    return {
+      visible: [...document.querySelectorAll('#playlists [data-playlist]')]
+        .some(card => card.textContent.includes('Excluir depois')),
+      persisted: JSON.parse(localStorage.getItem('lm_playlists') || '[]').map(item => item.name),
+      libraryTracks: document.querySelector('#stat-tracks').textContent
+    };
+  })()`), {
+    visible: false,
+    persisted: ['Playlist de teste'],
+    libraryTracks: '2'
+  }, 'excluir playlist deve persistir sem remover músicas da biblioteca');
   const homePlaylists = await evaluate(`document.querySelector('[data-go="home"]').click(); (() => {
     const cards = [...document.querySelectorAll('#home-playlists [data-playlist]')];
     const ids = cards.map(card => card.dataset.playlist);
@@ -439,6 +483,48 @@ try {
   }
   assert.equal(await evaluate('getComputedStyle(document.querySelector(`.bottom-nav`)).position === "fixed"'), true, 'sidebar desktop não está fixa');
 
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 600, deviceScaleFactor: 1, mobile: true });
+  assert.deepEqual(await evaluate(`(() => {
+    document.querySelector('#mini-open').click();
+    const dialog = document.querySelector('#player-dialog');
+    const content = document.querySelector('.player-content').getBoundingClientRect();
+    return {
+      open: dialog.open,
+      noVerticalOverflow: dialog.scrollHeight <= dialog.clientHeight,
+      contentInside: content.top >= dialog.getBoundingClientRect().top
+        && content.bottom <= dialog.getBoundingClientRect().bottom + 1
+    };
+  })()`), {
+    open: true,
+    noVerticalOverflow: true,
+    contentInside: true
+  }, 'player principal deve caber na altura útil sem rolagem vertical');
+  await evaluate("document.querySelector('#close-player').click()");
+
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await evaluate("document.querySelector('[data-go=explore]').click(); document.querySelector('#search-input').focus()");
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 500, deviceScaleFactor: 1, mobile: true });
+  await delay(300);
+  assert.deepEqual(await evaluate(`(() => {
+    const navStyle = getComputedStyle(document.querySelector('.bottom-nav'));
+    const mini = document.querySelector('#mini-player').getBoundingClientRect();
+    return {
+      detected: document.documentElement.hasAttribute('data-keyboard-open'),
+      navHidden: navStyle.visibility === 'hidden' && navStyle.pointerEvents === 'none',
+      miniVisible: !document.querySelector('#mini-player').hidden,
+      miniInsideViewport: mini.bottom <= window.innerHeight + 1
+    };
+  })()`), {
+    detected: true,
+    navHidden: true,
+    miniVisible: true,
+    miniInsideViewport: true
+  }, 'viewport reduzida durante digitação deve ocultar navegação e manter mini-player acessível');
+  await evaluate("document.querySelector('#search-input').blur()");
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await delay(150);
+  assert.equal(await evaluate("!document.documentElement.hasAttribute('data-keyboard-open') && getComputedStyle(document.querySelector('.bottom-nav')).visibility === 'visible'"), true, 'fechar teclado deve restaurar a navegação');
+
   await send('Page.reload', { ignoreCache: false });
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await evaluate('document.readyState === "complete"')) break;
@@ -458,8 +544,14 @@ try {
 
   await evaluate(`window.showDirectoryPicker = async () => ({
     async *values() {
-      yield { kind: 'file', name: 'Alpha.mp3', getFile: async () => new File(['alpha'], 'Alpha.mp3', { type: 'audio/mpeg', lastModified: 1000 }) };
-      yield { kind: 'file', name: 'Beta.mp3', getFile: async () => new File(['beta'], 'Beta.mp3', { type: 'audio/mpeg', lastModified: 2000 }) };
+      yield { kind: 'directory', name: 'Alpha', async *values() {
+        yield { kind: 'file', name: 'Alpha.mp3', getFile: async () => new File(['alpha'], 'Alpha.mp3', { type: 'audio/mpeg', lastModified: 1000 }) };
+        yield { kind: 'file', name: 'track.json', getFile: async () => new File([JSON.stringify({ id: 'alpha-id', title: 'Alpha', artist: 'Browser Artist', album: 'Browser Album', albumArtist: 'Browser Artist', releaseId: 'browser-release', trackNumber: 1, year: 2026 })], 'track.json', { type: 'application/json' }) };
+      } };
+      yield { kind: 'directory', name: 'Beta', async *values() {
+        yield { kind: 'file', name: 'Beta.mp3', getFile: async () => new File(['beta'], 'Beta.mp3', { type: 'audio/mpeg', lastModified: 2000 }) };
+        yield { kind: 'file', name: 'track.json', getFile: async () => new File([JSON.stringify({ id: 'beta-id', title: 'Beta', artist: 'Browser Artist', album: 'Browser Album', albumArtist: 'Browser Artist', releaseId: 'browser-release', trackNumber: 2, year: 2026 })], 'track.json', { type: 'application/json' }) };
+      } };
     }
   }); document.querySelector('#open-folder-empty').click()`);
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -494,6 +586,14 @@ try {
   }, 'LRC do Nexo não foi carregado no player');
   assert.equal(await evaluate('document.querySelector("#lyrics-dialog").showModal(); document.querySelector("#lyrics").dispatchEvent(new WheelEvent("wheel", { bubbles: true })); !document.querySelector("#lyrics-return-current").hidden'), true, 'rolagem manual deve oferecer retorno ao verso atual');
   assert.equal(await evaluate('document.querySelector("#lyrics-return-current").click(); document.querySelector("#lyrics-return-current").hidden'), true, 'controle deve restaurar o acompanhamento automático');
+  await evaluate(`(() => {
+    document.querySelector('#lyrics .lyric-line').click();
+    const root = document.querySelector('#lyrics');
+    root.scrollTop = root.scrollHeight;
+    root.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+  })()`);
+  await delay(4700);
+  assert.equal(await evaluate("document.querySelector('#lyrics-return-current').hidden"), true, 'acompanhamento deve ser reativado após inatividade');
   await evaluate('document.querySelector("#lyrics-dialog").close(); document.querySelector("#lyrics-translation").click()');
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#lyrics .translation")].map(node => node.textContent)'), ['Use seu coração', 'E não seus olhos'], 'tradução LRC não foi associada à letra original');
   await evaluate(`(() => {
@@ -519,6 +619,7 @@ try {
     window.showDirectoryPicker = async () => ({
       async *values() {
         yield { kind: 'file', name: 'Playback A.wav', getFile: async () => makeWav('Playback A.wav', 4000) };
+        yield { kind: 'file', name: 'Playback A.lrc', getFile: async () => new File(['[02:00.000]Primeiro verso válido\\n[02:10.000]Verso atual válido'], 'Playback A.lrc', { type: 'text/plain', lastModified: 4000 }) };
         yield { kind: 'file', name: 'Playback B.wav', getFile: async () => makeWav('Playback B.wav', 5000) };
       }
     });
@@ -542,6 +643,25 @@ try {
     audio.dispatchEvent(new Event('timeupdate'));
     return document.querySelector('#current-time').textContent;
   })()`), '2:14', 'pré-condição do bug 02:14 não foi reproduzida no áudio real');
+  await evaluate(`(() => {
+    document.querySelector('#lyrics-dialog').showModal();
+    const root = document.querySelector('#lyrics');
+    root.scrollTop = root.scrollHeight;
+    root.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+  })()`);
+  await delay(4700);
+  assert.equal(await evaluate(`(() => {
+    const root = document.querySelector('#lyrics');
+    const active = root.querySelector('.lyric-line.active');
+    if (!active) return false;
+    const rootBox = root.getBoundingClientRect();
+    const activeBox = active.getBoundingClientRect();
+    return document.querySelector('#lyrics-return-current').hidden
+      && active.textContent.includes('Verso atual válido')
+      && activeBox.top >= rootBox.top
+      && activeBox.bottom <= rootBox.bottom;
+  })()`), true, 'letra de áudio válido deve retomar e recentralizar a linha ativa');
+  await evaluate("document.querySelector('#lyrics-dialog').close()");
   const playbackBPoint = await evaluate('(() => { const audio = document.querySelector("#audio-player"); window.__previousTestSource = audio.src; const row = [...document.querySelectorAll("#all-tracks .track-row")].find(item => item.querySelector(".track-copy strong").textContent === "Playback B"); const bounds = row.querySelector("button").getBoundingClientRect(); return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }; })()');
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...playbackBPoint, button: 'left', clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...playbackBPoint, button: 'left', clickCount: 1 });
@@ -696,6 +816,53 @@ try {
   assert.equal(browserStress.firstBatch, 100, 'a lista grande deve disponibilizar o primeiro lote imediatamente');
   assert.equal(browserStress.rendered, 5005, 'a renderização incremental não concluiu 5.000 novas faixas');
   console.log('browser-smoke.mjs métricas de 5.000 faixas:', JSON.stringify(browserStress));
+  assert.deepEqual(await evaluate(`(async () => {
+    const { default: Library } = await import('./js/library.js');
+    const makeImage = type => new Promise(resolve => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#7e40ca';
+      context.fillRect(0, 0, 32, 32);
+      canvas.toBlob(resolve, type, .9);
+    });
+    const formats = [
+      ['jpeg', 'image/jpeg', '_COVERJPEG1'],
+      ['png', 'image/png', '_COVERPNG01'],
+      ['webp', 'image/webp', '_COVERWEBP1']
+    ];
+    const loaded = [];
+    for (const [extension, type, id] of formats) {
+      const blob = await makeImage(type);
+      const audio = new File(['audio'], 'Cover test [' + id + '].mp3', { type: 'audio/mpeg' });
+      const image = new File([blob], id + '.' + extension, { type, lastModified: 6000 });
+      await Library.importFiles([audio, image]);
+      const track = Library.getTracks().find(item => item.referenceId === id);
+      await Library.ensureMetadata(track, { refresh: true });
+      const source = Library.getCoverUrl(track);
+      const dimensions = await new Promise((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => resolve([element.naturalWidth, element.naturalHeight]);
+        element.onerror = reject;
+        element.src = source;
+      });
+      loaded.push({ extension, type: track.coverFile.type, dimensions });
+    }
+    const corruptAudio = new File(['audio'], 'Corrupt cover [_CORRUPT01].mp3', { type: 'audio/mpeg' });
+    const corruptImage = new File(['not-an-image'], '_CORRUPT01.jpg', { type: 'image/jpeg' });
+    await Library.importFiles([corruptAudio, corruptImage]);
+    const corruptTrack = Library.getTracks().find(item => item.referenceId === '_CORRUPT01');
+    await Library.ensureMetadata(corruptTrack, { refresh: true });
+    return { loaded, corruptRejected: corruptTrack.coverFile === null };
+  })()`), {
+    loaded: [
+      { extension: 'jpeg', type: 'image/jpeg', dimensions: [32, 32] },
+      { extension: 'png', type: 'image/png', dimensions: [32, 32] },
+      { extension: 'webp', type: 'image/webp', dimensions: [32, 32] }
+    ],
+    corruptRejected: true
+  }, 'capas JPEG, PNG e WebP quadradas devem carregar; imagem corrompida deve ser rejeitada');
   assert.deepEqual(exceptions, [], `exceções no navegador: ${exceptions.join('; ')}`);
   socket.close();
   console.log('browser-smoke.mjs: áudio real, 02:14, próxima/anterior, persistência, capas, PWA e layouts passaram');

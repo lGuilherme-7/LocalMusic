@@ -1,5 +1,5 @@
 /** Shell offline do Local Music. Arquivos de música nunca são armazenados no cache. */
-const CACHE_NAME = 'local-music-shell-v16';
+const CACHE_NAME = 'local-music-shell-v17';
 const CACHE_PREFIX = 'local-music-shell-';
 const APP_BASE = new URL('./', self.registration.scope);
 const asset = path => new URL(path, APP_BASE).href;

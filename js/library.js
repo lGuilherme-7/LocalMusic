@@ -22,6 +22,7 @@ const Library = (() => {
   let lastImportReport = emptyReport();
   const coverUrlLimit = 192;
   const metadataConcurrency = 4;
+  const unknownAlbum = 'Álbum desconhecido';
 
   const emit = () => listeners.forEach(listener => listener(getTracks()));
   const extension = name => String(name || '').split('.').pop().toLocaleLowerCase();
@@ -33,6 +34,17 @@ const Library = (() => {
   const isLyrics = name => lyricFormats.has(extension(name));
   const isImage = name => imageFormats.has(extension(name));
   const isZip = name => extension(name) === 'zip';
+
+  function positiveInteger(value) {
+    const match = String(value ?? '').match(/\d+/);
+    const number = Number(match?.[0]);
+    return Number.isInteger(number) && number > 0 ? number : null;
+  }
+
+  function isKnownAlbum(value) {
+    const album = clean(value);
+    return Boolean(album) && normalizedName(album) !== normalizedName(unknownAlbum);
+  }
 
   function emptyReport() {
     return { imported: 0, updated: 0, skipped: 0, lyrics: 0, translations: 0, covers: 0, errors: [] };
@@ -121,8 +133,12 @@ const Library = (() => {
       pathKey: normalizedName(normalizePath(path || file.name).replace(/\.[^.]+$/, '')),
       title: clean(meta.title, displayBaseName(file.name)),
       artist: clean(meta.artist, 'Artista desconhecido'),
-      album: clean(meta.album, 'Álbum desconhecido'),
+      album: clean(meta.album, unknownAlbum),
       albumArtist: clean(meta.albumArtist),
+      releaseId: clean(meta.releaseId) || clean(meta.release?.id) || null,
+      releaseType: clean(meta.releaseType) || clean(meta.release?.type) || null,
+      trackNumber: positiveInteger(meta.trackNumber ?? meta.track),
+      discNumber: positiveInteger(meta.discNumber ?? meta.disc),
       year: Number(meta.year) || null,
       genre: clean(meta.genre),
       duration: Number(meta.duration) || 0,
@@ -191,13 +207,27 @@ const Library = (() => {
     return track.coverData || null;
   }
 
+  function refreshCoverUrl(track, failedUrl) {
+    if (!track?.coverFile || track.cover !== failedUrl) return null;
+    revokeCover(track);
+    return getCoverUrl(track, { pin: track === pinnedCoverTrack });
+  }
+
+  async function recoverCover(track, failedUrl) {
+    if (!track?.coverFile || track.cover !== failedUrl) return null;
+    clearExternalCover(track);
+    await ensureMetadata(track, { refresh: true });
+    emit();
+    return getCoverUrl(track, { pin: track === pinnedCoverTrack });
+  }
+
   async function getCoverInfo(file) {
-    const fallback = { width: 0, height: 0, bytes: Number(file?.size) || 0, type: file?.type || '' };
+    const fallback = { width: 0, height: 0, bytes: Number(file?.size) || 0, type: file?.type || '', valid: null };
     if (!file) return fallback;
     try {
       if (typeof createImageBitmap === 'function') {
         const bitmap = await createImageBitmap(file);
-        const info = { ...fallback, width: bitmap.width, height: bitmap.height };
+        const info = { ...fallback, width: bitmap.width, height: bitmap.height, valid: bitmap.width > 0 && bitmap.height > 0 };
         bitmap.close?.();
         return info;
       }
@@ -207,23 +237,34 @@ const Library = (() => {
         const image = new Image();
         image.onload = () => {
           URL.revokeObjectURL(url);
-          resolve({ ...fallback, width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
+          resolve({
+            ...fallback,
+            width: image.naturalWidth || 0,
+            height: image.naturalHeight || 0,
+            valid: image.naturalWidth > 0 && image.naturalHeight > 0
+          });
         };
         image.onerror = () => {
           URL.revokeObjectURL(url);
-          resolve(fallback);
+          resolve({ ...fallback, valid: false });
         };
         image.src = url;
       });
     } catch {
-      return fallback;
+      return { ...fallback, valid: false };
     }
   }
 
   function coverScore(info) {
     if (!info) return 0;
-    const area = Math.max(0, Number(info.width) || 0) * Math.max(0, Number(info.height) || 0);
-    return area ? area * 1_000_000 + (Number(info.bytes) || 0) : Number(info.bytes) || 0;
+    if (info.valid === false) return -1;
+    const width = Math.max(0, Number(info.width) || 0);
+    const height = Math.max(0, Number(info.height) || 0);
+    const area = width * height;
+    const squareRatio = width && height ? Math.min(width, height) / Math.max(width, height) : 0;
+    return area
+      ? squareRatio * 1_000_000_000_000_000 + area * 1_000_000 + (Number(info.bytes) || 0)
+      : Number(info.bytes) || 0;
   }
 
   function setCover(track, file, info) {
@@ -233,6 +274,28 @@ const Library = (() => {
     track.coverInfo = info;
     track.coverData = null;
     track.cover = null;
+  }
+
+  function uniqueCoverCandidates(candidates) {
+    const unique = new Map();
+    candidates.forEach(candidate => {
+      if (!candidate?.file) return;
+      const key = [
+        normalizedName(candidate.file.name),
+        Number(candidate.file.size) || 0,
+        Number(candidate.file.lastModified) || 0
+      ].join('|');
+      unique.set(key, candidate);
+    });
+    return [...unique.values()];
+  }
+
+  function clearExternalCover(track) {
+    revokeCover(track);
+    track.coverFile = null;
+    track.coverName = null;
+    track.coverInfo = null;
+    track.cover = track.coverData || null;
   }
 
   function chooseFile(current, candidate) {
@@ -450,7 +513,14 @@ const Library = (() => {
     existing.identityKeys = [...new Set([...(existing.identityKeys || []), ...(incoming.identityKeys || [])])];
     if (!existing.title || existing.title === displayBaseName(priorFileName)) existing.title = incoming.title;
     if (!existing.artist || existing.artist === 'Artista desconhecido') existing.artist = incoming.artist;
-    if (!existing.album || existing.album === 'Álbum desconhecido') existing.album = incoming.album;
+    if (!isKnownAlbum(existing.album) && isKnownAlbum(incoming.album)) existing.album = incoming.album;
+    if (!existing.albumArtist && incoming.albumArtist) existing.albumArtist = incoming.albumArtist;
+    if (!existing.releaseId && incoming.releaseId) existing.releaseId = incoming.releaseId;
+    if (!existing.releaseType && incoming.releaseType) existing.releaseType = incoming.releaseType;
+    if (!existing.trackNumber && incoming.trackNumber) existing.trackNumber = incoming.trackNumber;
+    if (!existing.discNumber && incoming.discNumber) existing.discNumber = incoming.discNumber;
+    if (!existing.year && incoming.year) existing.year = incoming.year;
+    if (!existing.genre && incoming.genre) existing.genre = incoming.genre;
     if (!existing.duration && incoming.duration) existing.duration = incoming.duration;
     if (!existing.lyrics?.length && incoming.lyrics?.length) existing.lyrics = incoming.lyrics;
     replaceLyrics(existing, incoming, 'lyricsFile', 'lyricsFormat');
@@ -458,26 +528,29 @@ const Library = (() => {
     let replacedByNewerCover = false;
     if (incoming.coverFile) {
       const sameCover = normalizedName(incoming.coverName) === normalizedName(existing.coverName);
-      const newerSameCover = sameCover
-        && Number(incoming.coverFile.lastModified) > Number(existing.coverFile?.lastModified || 0);
-      if (!existing.coverFile || newerSameCover || coverScore(incoming.coverInfo) > coverScore(existing.coverInfo)) {
+      const currentModified = Number(existing.coverFile?.lastModified || 0);
+      const incomingModified = Number(incoming.coverFile.lastModified || 0);
+      const changedSameCover = sameCover
+        && (incomingModified > currentModified
+          || (incomingModified === currentModified && incoming.coverFile.size !== existing.coverFile?.size));
+      if (!existing.coverFile || changedSameCover || coverScore(incoming.coverInfo) > coverScore(existing.coverInfo)) {
         setCover(existing, incoming.coverFile, incoming.coverInfo);
-        if (newerSameCover) {
+        if (changedSameCover) {
           existing.pendingCoverCandidates = [...(incoming.pendingCoverCandidates || [])];
           replacedByNewerCover = true;
         }
       } else if (!incoming.pendingCoverCandidates?.length) {
-        existing.pendingCoverCandidates = [
+        existing.pendingCoverCandidates = uniqueCoverCandidates([
           ...(existing.pendingCoverCandidates || []),
           { file: incoming.coverFile, info: incoming.coverInfo }
-        ];
+        ]);
       }
     }
     if (incoming.pendingCoverCandidates?.length && !replacedByNewerCover) {
-      existing.pendingCoverCandidates = [
+      existing.pendingCoverCandidates = uniqueCoverCandidates([
         ...(existing.pendingCoverCandidates || []),
         ...incoming.pendingCoverCandidates
-      ];
+      ]);
     }
     return existing;
   }
@@ -565,8 +638,11 @@ const Library = (() => {
       id: track.id, sourceId: track.sourceId, referenceId: track.referenceId, identityKeys: track.identityKeys,
       file: track.file, fileName: track.fileName, fileType: track.fileType, fileLastModified: track.fileLastModified,
       path: track.path, pathKey: track.pathKey, title: track.title, artist: track.artist, album: track.album,
-      albumArtist: track.albumArtist, year: track.year, genre: track.genre, duration: track.duration, audio: track.audio,
+      albumArtist: track.albumArtist, releaseId: track.releaseId, releaseType: track.releaseType,
+      trackNumber: track.trackNumber, discNumber: track.discNumber, year: track.year, genre: track.genre,
+      duration: track.duration, audio: track.audio,
       coverData: track.coverData, coverFile: track.coverFile, coverName: track.coverName, coverInfo: track.coverInfo,
+      coverLastModified: Number(track.coverFile?.lastModified) || null,
       coverReference: track.coverReference, source: track.source, language: track.language, lyrics: track.lyrics,
       lyricsFile: track.lyricsFile, lyricsFormat: track.lyricsFormat, translationFile: track.translationFile,
       translationFormat: track.translationFormat, dateAdded: track.dateAdded, playCount: track.playCount, lastPlayed: track.lastPlayed
@@ -586,9 +662,24 @@ const Library = (() => {
   function reviveTrack(record) {
     const track = { ...record };
     track.file = reviveFile(record.file, record.fileName || record.id, record.fileType, record.fileLastModified);
-    track.coverFile = reviveFile(record.coverFile, record.coverName || 'cover', record.coverFile?.type, record.fileLastModified);
-    track.lyricsFile = reviveFile(record.lyricsFile, record.lyricsFile?.name || 'lyrics.lrc', record.lyricsFile?.type, record.fileLastModified);
-    track.translationFile = reviveFile(record.translationFile, record.translationFile?.name || 'translation.lrc', record.translationFile?.type, record.fileLastModified);
+    track.coverFile = reviveFile(
+      record.coverFile,
+      record.coverName || 'cover',
+      record.coverFile?.type,
+      record.coverLastModified || record.coverFile?.lastModified || record.fileLastModified
+    );
+    track.lyricsFile = reviveFile(
+      record.lyricsFile,
+      record.lyricsFile?.name || 'lyrics.lrc',
+      record.lyricsFile?.type,
+      record.lyricsFile?.lastModified || record.fileLastModified
+    );
+    track.translationFile = reviveFile(
+      record.translationFile,
+      record.translationFile?.name || 'translation.lrc',
+      record.translationFile?.type,
+      record.translationFile?.lastModified || record.fileLastModified
+    );
     track.identityKeys = Array.isArray(record.identityKeys) ? record.identityKeys : createIdentityKeys(track);
     track.cover = record.coverData || null;
     return track;
@@ -713,6 +804,25 @@ const Library = (() => {
     const entries = await expandArchives(sourceEntries, reportData);
     const audioEntries = entries.filter(entry => isAudio(entry.file.name));
     if (!audioEntries.length) {
+      const ancillaryEntries = entries.filter(entry => isLyrics(entry.file.name) || isImage(entry.file.name));
+      if (ancillaryEntries.length && tracks.length) {
+        const associatedTracks = new Set();
+        ancillaryEntries.forEach(entry => {
+          const kind = isImage(entry.file.name) ? 'image' : 'lyrics';
+          const track = associatedTrack(entry, tracks, kind);
+          if (track) associatedTracks.add(track);
+        });
+        if (associatedTracks.size) {
+          const changed = [...associatedTracks];
+          associateFiles(changed, ancillaryEntries, reportData);
+          await runWithConcurrency(changed, metadataConcurrency, track => ensureMetadata(track, { refresh: true, persist: false }));
+          await persistTracks(changed);
+          reportData.updated = changed.length;
+          lastImportReport = reportData;
+          emit();
+          return true;
+        }
+      }
       const message = 'Nenhum arquivo de áudio compatível foi encontrado.';
       report('warning', 'no-audio', message);
       reportData.errors.push(message);
@@ -774,9 +884,14 @@ const Library = (() => {
     })));
     if (enrichmentRevisions.get(track) !== revision) return;
     delete track.pendingCoverCandidates;
-    const best = inspected.reduce((winner, candidate) => (
+    const validCandidates = inspected.filter(candidate => candidate.info.valid !== false);
+    const best = validCandidates.reduce((winner, candidate) => (
       !winner || coverScore(candidate.info) > coverScore(winner.info) ? candidate : winner
     ), null);
+    if (!best && candidates.some(candidate => candidate.file === track.coverFile)) {
+      clearExternalCover(track);
+      return;
+    }
     if (best && (!track.coverFile || coverScore(best.info) >= coverScore(track.coverInfo))) {
       if (track.coverFile !== best.file) setCover(track, best.file, best.info);
       else track.coverInfo = best.info;
@@ -799,7 +914,11 @@ const Library = (() => {
           track.title = metadataTitle;
         }
         if (track.artist === 'Artista desconhecido') track.artist = clean(metadata.artist, track.artist);
-        if (track.album === 'Álbum desconhecido') track.album = clean(metadata.album, track.album);
+        if (!isKnownAlbum(track.album) && isKnownAlbum(metadata.album)) track.album = clean(metadata.album, track.album);
+        if (!track.albumArtist) track.albumArtist = clean(metadata.albumArtist);
+        if (!track.trackNumber) track.trackNumber = positiveInteger(metadata.trackNumber);
+        if (!track.discNumber) track.discNumber = positiveInteger(metadata.discNumber);
+        if (!track.year) track.year = Number(metadata.year) || null;
         if (!track.coverFile && !track.coverData && metadata.cover) {
           track.cover = metadata.cover;
           track.coverData = metadata.cover;
@@ -844,20 +963,39 @@ const Library = (() => {
   function getAlbums() {
     const albums = new Map();
     tracks.forEach(track => {
-      const key = track.album + '|' + track.artist;
+      if (!isKnownAlbum(track.album)) return;
+      const artist = clean(track.albumArtist) || clean(track.artist, 'Artista desconhecido');
+      const key = track.releaseId ? `release:${normalizedName(track.releaseId)}` : [
+        normalizedName(track.album),
+        normalizedName(artist),
+        Number(track.year) || 'unknown-year'
+      ].join('|');
       if (!albums.has(key)) {
         albums.set(key, {
+          id: 'album_' + stableKey(key),
+          releaseId: track.releaseId || null,
+          releaseType: track.releaseType || null,
           name: track.album,
-          artist: track.artist,
+          artist,
+          year: Number(track.year) || null,
           coverSourceTrack: track.cover || track.coverFile || track.coverData ? track : null,
-          count: 0
+          count: 0,
+          tracks: []
         });
       }
       const album = albums.get(key);
       album.count += 1;
+      album.tracks.push(track);
       if (!album.coverSourceTrack && (track.cover || track.coverFile || track.coverData)) album.coverSourceTrack = track;
     });
-    return [...albums.values()];
+    return [...albums.values()].map(album => ({
+      ...album,
+      tracks: album.tracks.sort((left, right) => (
+        (left.discNumber || 1) - (right.discNumber || 1)
+        || (left.trackNumber || Number.MAX_SAFE_INTEGER) - (right.trackNumber || Number.MAX_SAFE_INTEGER)
+        || String(left.title).localeCompare(String(right.title))
+      ))
+    })).sort((left, right) => left.name.localeCompare(right.name) || left.artist.localeCompare(right.artist));
   }
 
   function getArtists() {
@@ -870,6 +1008,7 @@ const Library = (() => {
     id: 'folder_' + stableKey(name),
     name,
     tracks: [...new Set(ids)],
+    kind: 'imported-collection',
     readOnly: true
   }));
   const getStats = () => ({ tracks: tracks.length, artists: getArtists().length, albums: getAlbums().length });
@@ -884,7 +1023,7 @@ const Library = (() => {
 
   return {
     openFolder, importFiles, restore, onUpdate, getTracks, getTrackById, getAlbums, getArtists, getFolders, getStats,
-    getLastImportReport, getDiagnostics, getCoverUrl, ensureMetadata, recordPlay
+    getLastImportReport, getDiagnostics, getCoverUrl, refreshCoverUrl, recoverCover, ensureMetadata, recordPlay
   };
 })();
 

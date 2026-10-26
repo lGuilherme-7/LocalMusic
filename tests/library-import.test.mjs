@@ -13,6 +13,11 @@ const metadata = {
   title: 'Faixa de teste',
   artist: 'Artista local',
   album: 'Álbum local',
+  albumArtist: 'Artista local',
+  releaseId: 'release-local-1',
+  trackNumber: 2,
+  discNumber: 1,
+  year: 2026,
   duration: 12.5,
   audio: { path: 'audio.mp3' },
   cover: { path: 'cover.webp' },
@@ -54,6 +59,19 @@ assert.ok(Library.getCoverUrl(track).startsWith('blob:'), 'capa auxiliar não fo
 assert.equal(track.lyricsFile.name, 'audio.srt');
 assert.equal(track.lyrics[0].translation.text, 'Line');
 assert.deepEqual(Library.getFolders()[0].tracks, ['track-stable-id']);
+assert.deepEqual(Library.getAlbums().map(album => ({
+  name: album.name,
+  artist: album.artist,
+  year: album.year,
+  count: album.count,
+  tracks: album.tracks.map(item => item.id)
+})), [{
+  name: 'Álbum local',
+  artist: 'Artista local',
+  year: 2026,
+  count: 1,
+  tracks: ['track-stable-id']
+}], 'álbuns confiáveis devem expor metadados e faixas disponíveis');
 
 selectedFiles = [];
 assert.equal(await Library.openFolder(), false, 'biblioteca vazia não deve ser considerada carregada');
@@ -82,4 +100,14 @@ assert.equal(afterReimport[0].coverFile.size, updatedCover.size, 'capa mais nova
 await Library.ensureMetadata(afterReimport[0]);
 assert.equal(afterReimport[0].coverFile.size, updatedCover.size, 'o enriquecimento tardio não pode restaurar a capa antiga');
 
-console.log('library-import.test.mjs: importação, associação Nexo, atualização e seleção vazia passaram');
+const coverOnly = new File(['nova-capa-quadrada'], '_RVCDKS5D4c.webp', { type: 'image/webp', lastModified: 4000 });
+assert.equal(await Library.importFiles([coverOnly]), true, 'uma capa isolada com identificador confiável deve atualizar a faixa existente');
+assert.equal(afterReimport[0].coverFile.name, '_RVCDKS5D4c.webp');
+assert.equal(afterReimport[0].coverFile.type, 'image/webp');
+assert.equal(Library.getTracks().filter(item => item.referenceId === '_RVCDKS5D4c').length, 1, 'atualizar só a capa não pode duplicar áudio');
+
+const unrelatedCover = new File(['errada'], '_OTHER12345.jpg', { type: 'image/jpeg', lastModified: 5000 });
+assert.equal(await Library.importFiles([unrelatedCover]), false, 'nomes apenas semelhantes não podem associar uma capa a outra faixa');
+assert.equal(afterReimport[0].coverFile.name, '_RVCDKS5D4c.webp');
+
+console.log('library-import.test.mjs: importação, associação Nexo, álbuns, atualização isolada e seleção vazia passaram');

@@ -9,6 +9,9 @@
 import Storage from './storage.js';
 
 const STORAGE_KEY = 'lm_playlists';
+const TOMBSTONES_KEY = 'lm_playlist_tombstones';
+const HIDDEN_COLLECTIONS_KEY = 'lm_hidden_collections';
+const TOMBSTONE_LIMIT = 500;
 
 const Playlists = (() => {
 
@@ -19,9 +22,10 @@ const Playlists = (() => {
   function getAll() {
     const data = Storage.get(STORAGE_KEY);
     if (!Array.isArray(data)) return [];
+    const tombstones = new Set(_storedIds(TOMBSTONES_KEY));
     let changed = false;
     const ids = new Set();
-    const normalized = data.filter(item => item && typeof item === 'object').map(item => {
+    const normalized = data.filter(item => item && typeof item === 'object' && !tombstones.has(item.id)).map(item => {
       let id = typeof item.id === 'string' && item.id ? item.id : _genId();
       if (ids.has(id)) {
         id = _genId();
@@ -31,7 +35,7 @@ const Playlists = (() => {
       const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : 'Sem título';
       const tracks = Array.isArray(item.tracks) ? [...new Set(item.tracks.filter(trackId => typeof trackId === 'string' && trackId))] : [];
       if (id !== item.id || name !== item.name || tracks.length !== item.tracks?.length) changed = true;
-      return { ...item, id, name, tracks, createdAt: Number(item.createdAt) || Date.now() };
+      return { ...item, id, name, tracks, kind: 'playlist', createdAt: Number(item.createdAt) || Date.now() };
     });
     if (changed || normalized.length !== data.length) _save(normalized);
     return normalized;
@@ -42,7 +46,19 @@ const Playlists = (() => {
    * @param {object[]} list
    */
   function _save(list) {
-    Storage.set(STORAGE_KEY, list);
+    return Storage.set(STORAGE_KEY, list);
+  }
+
+  function _storedIds(key) {
+    const value = Storage.get(key);
+    return Array.isArray(value) ? value.filter(id => typeof id === 'string' && id) : [];
+  }
+
+  function _rememberId(key, id, limit = TOMBSTONE_LIMIT) {
+    if (typeof id !== 'string' || !id) return false;
+    const ids = _storedIds(key).filter(value => value !== id);
+    ids.push(id);
+    return Storage.set(key, ids.slice(-limit));
   }
 
   /**
@@ -64,6 +80,7 @@ const Playlists = (() => {
       id:        _genId(),
       name:      name.trim() || 'Sem título',
       tracks:    [],
+      kind:      'playlist',
       createdAt: Date.now()
     };
     const list = getAll();
@@ -96,8 +113,18 @@ const Playlists = (() => {
     const list    = getAll();
     const updated = list.filter(p => p.id !== id);
     if (updated.length === list.length) return false;
-    _save(updated);
+    if (!_save(updated)) return false;
+    _rememberId(TOMBSTONES_KEY, id);
     return true;
+  }
+
+  /** Oculta uma coleção importada sem remover nenhuma faixa da biblioteca. */
+  function hideCollection(id) {
+    return _rememberId(HIDDEN_COLLECTIONS_KEY, id);
+  }
+
+  function isCollectionHidden(id) {
+    return _storedIds(HIDDEN_COLLECTIONS_KEY).includes(id);
   }
 
   /**
@@ -163,6 +190,23 @@ const Playlists = (() => {
     return pl ? pl.tracks.includes(trackId) : false;
   }
 
+  /** Remove apenas referências a IDs ausentes, mantendo playlists e músicas intactas. */
+  function removeOrphanedTrackReferences(validTrackIds) {
+    const valid = validTrackIds instanceof Set ? validTrackIds : new Set(validTrackIds || []);
+    const list = getAll();
+    let removed = 0;
+    list.forEach(playlist => {
+      const tracks = playlist.tracks.filter(trackId => {
+        if (valid.has(trackId)) return true;
+        removed += 1;
+        return false;
+      });
+      playlist.tracks = tracks;
+    });
+    if (removed) _save(list);
+    return removed;
+  }
+
   /**
    * Exporta todas as playlists como JSON string.
    * @returns {string}
@@ -184,10 +228,11 @@ const Playlists = (() => {
 
       const existing = getAll();
       const existingIds = new Set(existing.map(p => p.id));
+      const deletedIds = new Set(_storedIds(TOMBSTONES_KEY));
 
       for (const pl of imported) {
         if (pl.id && pl.name && Array.isArray(pl.tracks)) {
-          if (!existingIds.has(pl.id)) {
+          if (!existingIds.has(pl.id) && !deletedIds.has(pl.id)) {
             existing.push(pl);
             existingIds.add(pl.id);
           }
@@ -212,6 +257,7 @@ const Playlists = (() => {
   return {
     getAll, create, rename, remove, getById,
     addTrack, removeTrack, moveTrack, hasTrack,
+    hideCollection, isCollectionHidden, removeOrphanedTrackReferences,
     exportJSON, importJSON, count
   };
 

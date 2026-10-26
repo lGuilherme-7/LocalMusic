@@ -140,6 +140,25 @@
             <ul id="artists" class="artist-list">
             </ul>
           </div>
+          <section id="album-detail" class="album-detail" aria-labelledby="album-title" hidden>
+            <button class="back-button" id="close-album" type="button">
+              <i class="icon fa-solid fa-chevron-left" aria-hidden="true"></i>
+              <span>Álbuns</span>
+            </button>
+            <div class="album-hero">
+              <div id="album-cover" class="cover album-detail-cover"><i class="icon fa-solid fa-music" aria-hidden="true"></i></div>
+              <div>
+                <h1 id="album-title">Álbum</h1>
+                <p id="album-artist">Artista desconhecido</p>
+                <p id="album-summary">0 músicas</p>
+              </div>
+            </div>
+            <div class="album-detail-actions">
+              <button class="primary-button" id="play-album" type="button"><i class="icon fa-solid fa-play" aria-hidden="true"></i>Tocar</button>
+              <button class="secondary-button" id="queue-album" type="button"><i class="icon fa-solid fa-list" aria-hidden="true"></i>Fila</button>
+            </div>
+            <ul id="album-tracks" class="track-list"></ul>
+          </section>
         </section>
         <section class="screen" id="screen-playlists" aria-label="Playlists">
           <header class="app-header">

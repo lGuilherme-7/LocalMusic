@@ -21,6 +21,19 @@ const lineOnly = Lyrics.parseLrc('[00:02.000]Sem tempos por palavra\n[00:05.000]
 assert.equal(lineOnly[0].tokens.length, 0, 'LRC tradicional deve continuar no modo por verso');
 assert.equal(Lyrics.activeIndex(lineOnly, 3), 0);
 
+const unordered = Lyrics.parseLrc([
+  '[00:10.000]Última',
+  '[00:02.000]Primeira',
+  '[00:02.000]Primeira alternativa',
+  'linha sem timestamp'
+].join('\n'));
+assert.deepEqual(unordered.map(line => line.start), [2, 2, 10], 'timestamps fora de ordem devem ser normalizados');
+assert.equal(Lyrics.activeIndex(unordered, 2.5), 1, 'timestamp duplicado deve ter seleção determinística');
+assert.equal(Lyrics.activeIndex(unordered, 10.5), 2);
+
+const longLine = 'muito '.repeat(120).trim();
+assert.equal(Lyrics.parseLrc(`[00:01.000]${longLine}`)[0].original, longLine, 'linhas longas não podem ser truncadas pelo parser');
+
 const invalidTokens = await Lyrics.load({ lyrics: [{
   start: 4,
   end: 8,

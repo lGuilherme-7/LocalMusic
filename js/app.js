@@ -54,6 +54,7 @@ function setIcon(element, name) {
 }
 
 let currentPlaylist = null;
+let currentAlbum = null;
 let currentLyrics = [];
 let currentLyricsStatus = 'unavailable';
 let currentLyricIndex = -1;
@@ -63,6 +64,8 @@ let lyricLineElements = [];
 let lyricWordElements = [];
 let lyricsFrameId = null;
 let lyricsProgrammaticScroll = false;
+let lyricsProgrammaticScrollTimer = null;
+let lyricsResumeTimer = null;
 let lyricLoadRevision = 0;
 let pendingTrack = null;
 let pendingContext = null;
@@ -71,6 +74,8 @@ let toastTimer = null;
 let deferredInstallPrompt = null;
 let currentCoverKey = null;
 let exploreRenderRevision = 0;
+let viewportBaselineHeight = 0;
+let viewportUpdateFrame = null;
 const coverRevisions = new WeakMap();
 const observedCovers = new Set();
 
@@ -86,6 +91,35 @@ const coverObserver = typeof IntersectionObserver === 'function'
   : null;
 
 const isStandalone = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+
+function isTextInput(element) {
+  return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element?.isContentEditable;
+}
+
+function updateViewportState({ resetBaseline = false } = {}) {
+  const viewport = window.visualViewport;
+  const visibleHeight = viewport?.height || window.innerHeight;
+  if (resetBaseline) viewportBaselineHeight = visibleHeight;
+  viewportBaselineHeight = Math.max(viewportBaselineHeight, visibleHeight);
+  const focusedInput = isTextInput(document.activeElement);
+  const heightLoss = viewportBaselineHeight - visibleHeight;
+  const keyboardOpen = focusedInput && heightLoss > Math.max(100, viewportBaselineHeight * 0.16);
+  const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
+  const keyboardInset = keyboardOpen
+    ? Math.max(0, layoutHeight - visibleHeight - (viewport?.offsetTop || 0))
+    : 0;
+  document.documentElement.toggleAttribute('data-keyboard-open', keyboardOpen);
+  document.documentElement.style.setProperty('--keyboard-inset', `${keyboardInset}px`);
+  document.documentElement.style.setProperty('--visual-viewport-height', `${visibleHeight}px`);
+}
+
+function scheduleViewportUpdate(options) {
+  if (viewportUpdateFrame) cancelAnimationFrame(viewportUpdateFrame);
+  viewportUpdateFrame = requestAnimationFrame(() => {
+    viewportUpdateFrame = null;
+    updateViewportState(options);
+  });
+}
 
 function updateInstallOption() {
   const button = $('install-app');
@@ -141,26 +175,42 @@ function cover(element, track, large = false, priority = false) {
       element.removeAttribute('aria-busy');
       return;
     }
-    const image = new Image();
-    image.alt = `Capa de ${text(track.title || track.name, 'música')}`;
-    image.loading = priority ? 'eager' : 'lazy';
-    image.decoding = 'async';
-    if (priority) image.fetchPriority = 'high';
-    image.addEventListener('load', () => {
-      if (coverRevisions.get(element) !== revision) return;
-      element.replaceChildren(image);
-      element.dataset.coverState = 'loaded';
-      element.classList.remove('cover-loading', 'cover-error');
-      element.removeAttribute('aria-busy');
-    }, { once: true });
-    image.addEventListener('error', () => {
-      if (coverRevisions.get(element) !== revision) return;
-      element.dataset.coverState = 'error';
-      element.classList.remove('cover-loading');
-      element.classList.add('cover-error');
-      element.removeAttribute('aria-busy');
-    }, { once: true });
-    image.src = source;
+    const loadSource = (imageSource, canRefreshBlobUrl) => {
+      const image = new Image();
+      image.alt = `Capa de ${text(track.title || track.name, 'música')}`;
+      image.loading = priority ? 'eager' : 'lazy';
+      image.decoding = 'async';
+      if (priority) image.fetchPriority = 'high';
+      image.addEventListener('load', () => {
+        if (coverRevisions.get(element) !== revision) return;
+        element.replaceChildren(image);
+        element.dataset.coverState = 'loaded';
+        element.classList.remove('cover-loading', 'cover-error');
+        element.removeAttribute('aria-busy');
+      }, { once: true });
+      image.addEventListener('error', async () => {
+        if (coverRevisions.get(element) !== revision) return;
+        if (canRefreshBlobUrl) {
+          const refreshed = Library.refreshCoverUrl(sourceTrack, imageSource);
+          if (refreshed) {
+            loadSource(refreshed, false);
+            return;
+          }
+        }
+        const fallback = await Library.recoverCover(sourceTrack, imageSource);
+        if (coverRevisions.get(element) !== revision) return;
+        if (fallback) {
+          loadSource(fallback, false);
+          return;
+        }
+        element.dataset.coverState = 'missing';
+        element.classList.remove('cover-loading');
+        element.classList.add('cover-error');
+        element.removeAttribute('aria-busy');
+      }, { once: true });
+      image.src = imageSource;
+    };
+    loadSource(source, source.startsWith('blob:'));
   };
   if (priority || !coverObserver) {
     element.__loadLocalMusicCover();
@@ -412,10 +462,20 @@ function renderExplore() {
   const query = normalized($('search-input').value.trim());
   const albums = Library.getAlbums().filter(album => !query || normalized(album.name).includes(query) || normalized(album.artist).includes(query));
   renderIncrementally($('albums'), albums, album => {
-    const button = mediaCard(album);
+    const button = document.createElement('button');
+    button.type = 'button';
     button.className = 'album-card';
+    const art = document.createElement('span');
+    art.className = 'cover';
+    cover(art, album);
+    const title = document.createElement('strong');
+    title.textContent = text(album.name, 'Álbum');
+    const subtitle = document.createElement('small');
+    subtitle.textContent = text(album.artist, `${album.count} músicas`);
+    button.append(art, title, subtitle);
+    button.addEventListener('click', () => openAlbum(album.id));
     return button;
-  }, revision);
+  }, revision, 'Nenhum álbum identificado.');
   const artists = Library.getArtists().filter(artist => !query || normalized(artist.name).includes(query));
   renderIncrementally($('artists'), artists, artist => {
     const item = document.createElement('li');
@@ -431,6 +491,44 @@ function renderExplore() {
     item.append(button);
     return item;
   }, revision);
+}
+
+function setExploreOverviewVisible(visible) {
+  const elements = [
+    document.querySelector('#screen-explore > .app-header'),
+    document.querySelector('#screen-explore > .search-field'),
+    document.querySelector('#screen-explore > .filters'),
+    document.querySelector('#screen-explore > .tabs'),
+    ...document.querySelectorAll('#screen-explore > .tab-panel')
+  ];
+  elements.forEach(element => {
+    if (!element) return;
+    if (visible && element.classList.contains('tab-panel')) {
+      const selected = document.querySelector('.tab.active')?.dataset.tab;
+      element.hidden = element.id !== `tab-${selected}`;
+    } else {
+      element.hidden = !visible;
+    }
+  });
+  $('album-detail').hidden = visible;
+}
+
+function openAlbum(id) {
+  currentAlbum = Library.getAlbums().find(album => album.id === id) || null;
+  if (!currentAlbum) return;
+  setExploreOverviewVisible(false);
+  cover($('album-cover'), currentAlbum, true, true);
+  $('album-title').textContent = currentAlbum.name;
+  $('album-artist').textContent = text(currentAlbum.artist, 'Artista desconhecido');
+  const year = currentAlbum.year ? ` · ${currentAlbum.year}` : '';
+  $('album-summary').textContent = `${currentAlbum.count} música${currentAlbum.count === 1 ? '' : 's'}${year}`;
+  $('album-tracks').replaceChildren(...currentAlbum.tracks.map(track => renderTrackRow(track, currentAlbum.tracks)));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeAlbum() {
+  currentAlbum = null;
+  setExploreOverviewVisible(true);
 }
 
 function syncSearchControls() {
@@ -455,6 +553,7 @@ function playlistTracks(playlist) {
 function allPlaylists() {
   const unique = new Map();
   [...Library.getFolders(), ...Playlists.getAll()].forEach(playlist => {
+    if (playlist?.kind === 'imported-collection' && Playlists.isCollectionHidden(playlist.id)) return;
     if (playlist?.id && playlist.id !== 'favorites' && !unique.has(playlist.id)) unique.set(playlist.id, playlist);
   });
   return [...unique.values()];
@@ -499,7 +598,8 @@ function openPlaylist(id) {
   $('playlist-title').textContent = currentPlaylist.name;
   const editable = !currentPlaylist.readOnly && currentPlaylist.id !== 'favorites';
   $('rename-playlist').hidden = !editable;
-  $('delete-playlist').hidden = !editable;
+  $('delete-playlist').hidden = currentPlaylist.id === 'favorites';
+  $('delete-playlist').setAttribute('aria-label', currentPlaylist.readOnly ? 'Ocultar coleção importada' : 'Excluir playlist');
   renderPlaylistDetail();
 }
 
@@ -716,11 +816,18 @@ function scrollActiveLyricIntoView(index, immediate = false) {
   const root = $('lyrics');
   const element = lyricLineElements[index];
   if (!element || !root || !lyricsAutoScroll) return;
-  const target = Math.max(0, Math.min(root.scrollHeight - root.clientHeight, element.offsetTop - root.clientHeight * 0.34));
+  const readingPosition = root.clientHeight * 0.38;
+  const target = Math.max(0, Math.min(
+    root.scrollHeight - root.clientHeight,
+    element.offsetTop + element.offsetHeight / 2 - readingPosition
+  ));
   if (Math.abs(root.scrollTop - target) < 12) return;
   lyricsProgrammaticScroll = true;
   root.scrollTo({ top: target, behavior: immediate || prefersReducedMotion() ? 'auto' : 'smooth' });
-  window.setTimeout(() => { lyricsProgrammaticScroll = false; }, immediate ? 100 : 600);
+  clearTimeout(lyricsProgrammaticScrollTimer);
+  lyricsProgrammaticScrollTimer = window.setTimeout(() => {
+    lyricsProgrammaticScroll = false;
+  }, immediate ? 100 : 900);
 }
 
 function updateLyricsTime(time, { immediate = false, force = false } = {}) {
@@ -738,11 +845,20 @@ function updateLyricsTime(time, { immediate = false, force = false } = {}) {
 function setLyricsAutoScroll(enabled) {
   lyricsAutoScroll = enabled;
   $('lyrics-return-current').hidden = enabled;
+  clearTimeout(lyricsResumeTimer);
+  lyricsResumeTimer = null;
+  if (!enabled) {
+    lyricsResumeTimer = window.setTimeout(() => {
+      if (!$('lyrics-dialog').open) return;
+      setLyricsAutoScroll(true);
+      updateLyricsTime(Player.getCurrentTime(), { force: true });
+    }, 4500);
+  }
 }
 
 function startLyricsAnimation() {
   if (lyricsFrameId || !Player.isPlaying() || !$('lyrics-dialog').open || document.hidden
-    || !currentLyrics.some(line => line.tokens.length)) return;
+    || !currentLyrics.some(line => line.timed)) return;
   const tick = () => {
     if (!Player.isPlaying() || !$('lyrics-dialog').open || document.hidden) {
       lyricsFrameId = null;
@@ -874,6 +990,7 @@ function filterByArtist(artist) {
 }
 
 function showExploreTab(name) {
+  if (currentAlbum) closeAlbum();
   document.querySelectorAll('.tab').forEach(tab => {
     const active = tab.dataset.tab === name;
     tab.classList.toggle('active', active);
@@ -890,7 +1007,10 @@ function showScreen(name) {
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
-  if (name === 'explore') renderExplore();
+  if (name === 'explore') {
+    if (!currentAlbum) setExploreOverviewVisible(true);
+    renderExplore();
+  }
   if (name === 'playlists') renderPlaylists();
   if (name === 'profile') renderProfile();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -901,7 +1021,8 @@ function renderProfile() {
   $('stat-tracks').textContent = stats.tracks;
   $('stat-artists').textContent = stats.artists;
   $('stat-albums').textContent = stats.albums;
-  $('stat-playlists').textContent = Playlists.count() + Library.getFolders().length + 1;
+  const visibleCollections = Library.getFolders().filter(folder => !Playlists.isCollectionHidden(folder.id));
+  $('stat-playlists').textContent = Playlists.count() + visibleCollections.length + 1;
   const profile = Storage.get('lm_user_profile') || {};
   $('profile-name').value = profile.name || 'Seu nome';
   $('avatar').replaceChildren();
@@ -1012,6 +1133,15 @@ function bind() {
   });
   $('sort-tracks').addEventListener('change', renderExplore);
   document.querySelectorAll('.tab').forEach(button => button.addEventListener('click', () => showExploreTab(button.dataset.tab)));
+  $('close-album').addEventListener('click', closeAlbum);
+  $('play-album').addEventListener('click', () => {
+    if (currentAlbum?.tracks.length) playTrack(currentAlbum.tracks[0], currentAlbum.tracks);
+  });
+  $('queue-album').addEventListener('click', () => {
+    if (!currentAlbum?.tracks.length) return;
+    currentAlbum.tracks.forEach(track => Queue.addEnd(track));
+    toast('Álbum adicionado à fila');
+  });
 
   document.querySelector('#playlist-overview [data-playlist="favorites"]')
     .addEventListener('click', () => openPlaylist('favorites'));
@@ -1035,11 +1165,23 @@ function bind() {
   });
   $('rename-playlist').addEventListener('click', () => openPlaylistDialog(currentPlaylist));
   $('delete-playlist').addEventListener('click', () => {
-    if (confirm('Excluir esta playlist?')) {
-      Playlists.remove(currentPlaylist.id);
+    const importedCollection = currentPlaylist?.kind === 'imported-collection';
+    const question = importedCollection
+      ? 'Ocultar esta coleção importada? As músicas continuarão na biblioteca.'
+      : 'Excluir esta playlist?';
+    if (confirm(question)) {
+      const removed = importedCollection
+        ? Playlists.hideCollection(currentPlaylist.id)
+        : Playlists.remove(currentPlaylist.id);
+      if (!removed) {
+        toast('Não foi possível salvar a exclusão.');
+        return;
+      }
       closePlaylist();
       renderPlaylists();
       renderHome();
+      renderProfile();
+      toast(importedCollection ? 'Coleção ocultada' : 'Playlist excluída');
     }
   });
   $('playlist-save').addEventListener('click', () => {
@@ -1166,6 +1308,15 @@ function bind() {
     if ($('lyrics-dialog').open && currentLyricIndex >= 0 && lyricsAutoScroll) {
       scrollActiveLyricIntoView(currentLyricIndex, true);
     }
+    scheduleViewportUpdate();
+  }, { passive: true });
+  window.visualViewport?.addEventListener('resize', scheduleViewportUpdate, { passive: true });
+  window.visualViewport?.addEventListener('scroll', scheduleViewportUpdate, { passive: true });
+  document.addEventListener('focusin', () => scheduleViewportUpdate());
+  document.addEventListener('focusout', () => window.setTimeout(scheduleViewportUpdate, 80));
+  window.addEventListener('orientationchange', () => {
+    viewportBaselineHeight = 0;
+    window.setTimeout(() => scheduleViewportUpdate({ resetBaseline: true }), 250);
   }, { passive: true });
 }
 
@@ -1181,6 +1332,7 @@ function renderAll() {
   renderPlaylists();
   renderProfile();
   if ($('screen-explore').classList.contains('active')) renderExplore();
+  if (currentAlbum && !$('album-detail').hidden) openAlbum(currentAlbum.id);
   if (!$('playlist-detail').hidden && currentPlaylist) renderPlaylistDetail();
 }
 
@@ -1225,6 +1377,7 @@ async function init() {
   $('theme-toggle').checked = theme === 'light';
   updateModeButtons();
   bind();
+  updateViewportState({ resetBaseline: true });
   updateInstallOption();
   Library.onUpdate(tracks => {
     if (!queueRestored && tracks.length) {
@@ -1265,7 +1418,10 @@ async function init() {
   void registerServiceWorker();
   renderAll();
   try {
-    await Library.restore();
+    const restored = await Library.restore();
+    if (restored) {
+      Playlists.removeOrphanedTrackReferences(new Set(Library.getTracks().map(track => track.id)));
+    }
   } catch (error) {
     console.warn('Local Music: não foi possível restaurar a biblioteca.', error);
     toast('Ocorreu um problema ao abrir a biblioteca. Você pode tentar novamente recarregando o app.');

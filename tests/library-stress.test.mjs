@@ -37,7 +37,7 @@ for (const size of sizes) {
   const aggregationMs = performance.now() - aggregationStarted;
   assert.equal(stats.tracks, size);
   assert.equal(stats.artists, 1);
-  assert.equal(stats.albums, 1);
+  assert.equal(stats.albums, 0, 'metadados ausentes não devem criar um álbum artificial');
 
   const enrichmentStarted = performance.now();
   await Promise.all(Library.getTracks().map(track => Library.ensureMetadata(track)));

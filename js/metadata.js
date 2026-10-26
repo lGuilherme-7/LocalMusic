@@ -1,7 +1,7 @@
 /**
  * metadata.js
  * Extrai metadados de arquivos de áudio usando jsmediatags (CDN global).
- * Obtém: título, artista, álbum, capa (base64 data URL).
+ * Obtém título, artista, álbum, organização do lançamento e capa incorporada.
  * Aplica fallbacks para campos ausentes.
  */
 
@@ -31,6 +31,17 @@ const Metadata = (() => {
     return filename.replace(/\.[^.]+$/, '');
   }
 
+  function _positiveInteger(value) {
+    const match = String(value ?? '').match(/\d+/);
+    const number = Number(match?.[0]);
+    return Number.isInteger(number) && number > 0 ? number : null;
+  }
+
+  function _year(value) {
+    const match = String(value ?? '').match(/(?:19|20)\d{2}/);
+    return match ? Number(match[0]) : null;
+  }
+
   /**
    * Extrai metadados de um File de áudio.
    * Retorna uma Promise com o objeto de metadados normalizados.
@@ -57,12 +68,23 @@ const Metadata = (() => {
         onSuccess(tag) {
           if (settled) return;
           const t = tag.tags;
-          const title  = (t.title  && t.title.trim())  || _nameFromFile(file.name);
+          const title = (t.title && t.title.trim()) || _nameFromFile(file.name);
           const artist = (t.artist && t.artist.trim()) || 'Artista desconhecido';
-          const album  = (t.album  && t.album.trim())  || 'Álbum desconhecido';
-          const cover  = (t.picture) ? _pictureToDataURL(t.picture) : null;
+          const album = (t.album && t.album.trim()) || 'Álbum desconhecido';
+          const albumArtist = String(t.albumArtist || '').trim();
+          const cover = t.picture ? _pictureToDataURL(t.picture) : null;
 
-          finish({ title, artist, album, cover, duration: 0 });
+          finish({
+            title,
+            artist,
+            album,
+            albumArtist,
+            trackNumber: _positiveInteger(t.track),
+            discNumber: _positiveInteger(t.disk || t.disc),
+            year: _year(t.year),
+            cover,
+            duration: 0
+          });
         },
         onError() {
           finish(_fallback(file));
@@ -81,6 +103,10 @@ const Metadata = (() => {
       title:    _nameFromFile(file.name),
       artist:   'Artista desconhecido',
       album:    'Álbum desconhecido',
+      albumArtist: '',
+      trackNumber: null,
+      discNumber: null,
+      year: null,
       cover:    null,
       duration: 0
     };

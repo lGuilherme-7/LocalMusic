@@ -44,7 +44,7 @@ const server = createServer(async (request, response) => {
     if (relativePath === 'service-worker.js') {
       const cachePhase = phase === 'audit-same-version' ? 'audit-b' : phase;
       body = Buffer.from(
-        body.toString('utf8').replace('local-music-shell-v16', `local-music-shell-${cachePhase}`)
+        body.toString('utf8').replace('local-music-shell-v17', `local-music-shell-${cachePhase}`)
           + `\n// fase de teste: ${phase}\n`,
         'utf8'
       );
