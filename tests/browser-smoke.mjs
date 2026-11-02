@@ -65,7 +65,7 @@ try {
   await send('Runtime.enable');
   await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-  await send('Page.navigate', { url: 'http://127.0.0.1:8765/' });
+  await send('Page.navigate', { url: 'http://127.0.0.1:8765/carregamento.html' });
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (await evaluate('document.readyState === "complete"')) break;
     await delay(100);
@@ -101,7 +101,7 @@ try {
     icons: manifest.icons.map(({ src, sizes, purpose }) => ({ src, sizes, purpose: purpose || null }))
   }))`), {
     name: 'Local Music',
-    startUrl: './',
+    startUrl: './carregamento.html',
     scope: './',
     display: 'standalone',
     icons: [
@@ -347,6 +347,40 @@ try {
   })()`);
   assert.deepEqual(exceptions, [], `exceções antes do fluxo de playlist: ${exceptions.join('; ')}`);
   assert.deepEqual(playlistRegression, { cards: 1, gap: 12, title: 'Playlist de teste', details: 1 }, 'playlists devem abrir uma vez, com o nome correto e espaçamento vertical real');
+  const customPlaylistCover = await evaluate(`(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#7c52f5';
+    context.fillRect(0, 0, 64, 64);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], 'playlist.png', { type: 'image/png' }));
+    const input = document.querySelector('#playlist-cover-input');
+    input.files = transfer.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (document.querySelector('#playlist-cover img')) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const playlistId = JSON.parse(localStorage.getItem('lm_playlists'))[0].id;
+    const stored = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('local-music-playlist-assets', 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const get = request.result.transaction('covers', 'readonly').objectStore('covers').get(playlistId);
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    return {
+      displayed: Boolean(document.querySelector('#playlist-cover img')),
+      stored: stored?.blob instanceof Blob,
+      dimensions: [stored?.width, stored?.height]
+    };
+  })()`);
+  assert.deepEqual(customPlaylistCover, { displayed: true, stored: true, dimensions: [64, 64] }, 'a capa personalizada deve ser validada, exibida e salva no IndexedDB');
   await evaluate("document.querySelector('#close-playlist').click()");
   assert.deepEqual(await evaluate(`(() => {
     document.querySelector('#create-playlist').click();
@@ -541,6 +575,34 @@ try {
     theme: document.documentElement.dataset.theme,
     background: getComputedStyle(document.body).backgroundColor
   })`), { emptyVisible: false, contentHidden: false, miniHidden: true, contentDisplay: 'block', miniDisplay: 'none', persistedPlaylist: 1, theme: 'light', background: 'rgb(248, 247, 251)' }, 'recarregar deve restaurar a biblioteca persistida e preservar o tema');
+  const restoredPlaylistCover = await evaluate(`(async () => {
+    document.querySelector('[data-go="playlists"]').click();
+    [...document.querySelectorAll('#playlists [data-playlist]')]
+      .find(card => card.textContent.includes('Playlist de teste')).click();
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (document.querySelector('#playlist-cover img')) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const displayed = Boolean(document.querySelector('#playlist-cover img'));
+    document.querySelector('#remove-playlist-cover').click();
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (!document.querySelector('#playlist-cover img')) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    const playlistId = JSON.parse(localStorage.getItem('lm_playlists'))[0].id;
+    const stored = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('local-music-playlist-assets', 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const get = request.result.transaction('covers', 'readonly').objectStore('covers').get(playlistId);
+        get.onsuccess = () => resolve(get.result || null);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    document.querySelector('#close-playlist').click();
+    return { displayed, removedFromView: !document.querySelector('#playlist-cover img'), stored };
+  })()`);
+  assert.deepEqual(restoredPlaylistCover, { displayed: true, removedFromView: true, stored: null }, 'a capa da playlist deve sobreviver à recarga e permitir remoção isolada');
 
   await evaluate(`window.showDirectoryPicker = async () => ({
     async *values() {
@@ -818,6 +880,7 @@ try {
   console.log('browser-smoke.mjs métricas de 5.000 faixas:', JSON.stringify(browserStress));
   assert.deepEqual(await evaluate(`(async () => {
     const { default: Library } = await import('./js/library.js');
+    const { default: Player } = await import('./js/player.js');
     const makeImage = type => new Promise(resolve => {
       const canvas = document.createElement('canvas');
       canvas.width = 32;
@@ -854,14 +917,32 @@ try {
     await Library.importFiles([corruptAudio, corruptImage]);
     const corruptTrack = Library.getTracks().find(item => item.referenceId === '_CORRUPT01');
     await Library.ensureMetadata(corruptTrack, { refresh: true });
-    return { loaded, corruptRejected: corruptTrack.coverFile === null };
+    document.querySelector('[data-go="explore"]').click();
+    document.querySelector('[data-tab="tracks"]').click();
+    const coveredTrack = Library.getTracks().find(item => item.referenceId === '_COVERJPEG1');
+    let listedBeforePlayback = false;
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const row = [...document.querySelectorAll('#all-tracks [data-track-id]')]
+        .find(item => item.dataset.trackId === coveredTrack.id);
+      listedBeforePlayback = Boolean(row?.querySelector('.cover img'));
+      if (listedBeforePlayback) break;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    return {
+      loaded,
+      corruptRejected: corruptTrack.coverFile === null,
+      listedBeforePlayback,
+      wasNotPlayed: Player.getCurrentTrack()?.id !== coveredTrack.id
+    };
   })()`), {
     loaded: [
       { extension: 'jpeg', type: 'image/jpeg', dimensions: [32, 32] },
       { extension: 'png', type: 'image/png', dimensions: [32, 32] },
       { extension: 'webp', type: 'image/webp', dimensions: [32, 32] }
     ],
-    corruptRejected: true
+    corruptRejected: true,
+    listedBeforePlayback: true,
+    wasNotPlayed: true
   }, 'capas JPEG, PNG e WebP quadradas devem carregar; imagem corrompida deve ser rejeitada');
   assert.deepEqual(exceptions, [], `exceções no navegador: ${exceptions.join('; ')}`);
   socket.close();

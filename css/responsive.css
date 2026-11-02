@@ -72,6 +72,12 @@
   .full-cover { width:min(78vw,340px); height:min(78vw,340px) }
 }
 
+@media (pointer:coarse) {
+  input,select,textarea {
+    font-size:16px
+  }
+}
+
 @media(max-width:350px) {
   .mini-controls #prev { display:none }
   .mini-player { left:5px; right:5px; padding-inline:8px }

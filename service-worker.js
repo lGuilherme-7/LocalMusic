@@ -1,15 +1,15 @@
 /** Shell offline do Local Music. Arquivos de música nunca são armazenados no cache. */
-const CACHE_NAME = 'local-music-shell-v17';
+const CACHE_NAME = 'local-music-shell-v18';
 const CACHE_PREFIX = 'local-music-shell-';
 const APP_BASE = new URL('./', self.registration.scope);
 const asset = path => new URL(path, APP_BASE).href;
 const CACHE_COMPLETE_MARKER = asset('./__local_music_cache_complete__');
 
 const STATIC_ASSETS = [
-  './', './index.html', './welcome.html', './manifest.json',
-  './css/style.css', './css/tokens.css', './css/base.css', './css/components.css', './css/player.css', './css/responsive.css',
-  './js/app.js', './js/library.js', './js/metadata.js', './js/player.js', './js/queue.js', './js/search.js',
-  './js/playlists.js', './js/favorites.js', './js/storage.js', './js/lyrics.js', './js/zip.js', './js/media-session.js',
+  './', './index.html', './carregamento.html', './welcome.html', './manifest.json',
+  './css/style.css', './css/loading.css', './css/tokens.css', './css/base.css', './css/components.css', './css/player.css', './css/responsive.css',
+  './js/app.js', './js/startup.js', './js/library.js', './js/metadata.js', './js/player.js', './js/queue.js', './js/search.js',
+  './js/playlists.js', './js/playlist-covers.js', './js/favorites.js', './js/storage.js', './js/lyrics.js', './js/zip.js', './js/media-session.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'
 ].map(asset);
 const STATIC_ASSET_URLS = new Set(STATIC_ASSETS);

@@ -195,6 +195,14 @@ assert.equal(Player.getState(), 'buffering');
 audio.dispatchEvent(new Event('playing'));
 assert.equal(Player.getState(), 'playing', 'a reprodução deve sair de buffering quando o áudio voltar');
 
+audio.readyState = 2;
+audio.paused = false;
+audio.dispatchEvent(new Event('playing'));
+assert.equal(Player.getState(), 'playing', 'o Safari pode confirmar playing antes de HAVE_FUTURE_DATA');
+audio.readyState = 3;
+audio.dispatchEvent(new Event('stalled'));
+assert.equal(Player.getState(), 'playing', 'stalled com dados suficientes não deve criar spinner falso');
+
 audio.paused = true;
 audio.dispatchEvent(new Event('pause'));
 assert.equal(Player.getState(), 'paused', 'uma pausa real após o início deve continuar sendo respeitada');
@@ -274,4 +282,4 @@ assert.equal(
 );
 assert.equal(new Set(revokedUrls).size, revokedUrls.length, 'uma Object URL não deve ser revogada duas vezes');
 
-console.log('player-regression.test.mjs: 02:14, 50 trocas, cancelamentos, buffering, erro/fim, URLs e autoplay passaram');
+console.log('player-regression.test.mjs: 02:14, 50 trocas, Safari, cancelamentos, buffering, erro/fim, URLs e autoplay passaram');

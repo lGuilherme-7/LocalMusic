@@ -3,7 +3,7 @@
   "short_name": "Local Music",
   "id": "./",
   "description": "Sua biblioteca de música local, privada e disponível offline.",
-  "start_url": "./",
+  "start_url": "./carregamento.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0B0811",

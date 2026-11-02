@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0b0811">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Local Music">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="stylesheet" href="css/loading.css">
+    <title>Local Music</title>
+  </head>
+  <body class="loading-page">
+    <main class="startup-screen" aria-labelledby="startup-title">
+      <div class="startup-card">
+        <span class="startup-disc" aria-hidden="true"><span></span></span>
+        <p class="startup-kicker">Biblioteca local</p>
+        <h1 id="startup-title">LOCAL MUSIC</h1>
+        <div class="startup-meter" role="progressbar" aria-label="Preparando o aplicativo">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p id="startup-message" class="startup-message" aria-live="polite">Preparando sua biblioteca</p>
+        <div id="startup-actions" class="startup-actions" hidden>
+          <p>Não foi possível acessar o armazenamento local. Seus dados não foram alterados.</p>
+          <button id="startup-retry" type="button">Tentar novamente</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="js/startup.js"></script>
+  </body>
+</html>

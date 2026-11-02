@@ -5,6 +5,7 @@ import Queue from './queue.js';
 import Lyrics from './lyrics.js';
 import Favorites from './favorites.js';
 import Playlists from './playlists.js';
+import PlaylistCovers from './playlist-covers.js';
 import MediaSession from './media-session.js';
 
 const $ = id => document.getElementById(id);
@@ -77,6 +78,7 @@ let exploreRenderRevision = 0;
 let viewportBaselineHeight = 0;
 let viewportUpdateFrame = null;
 const coverRevisions = new WeakMap();
+const playlistCoverRevisions = new WeakMap();
 const observedCovers = new Set();
 
 const coverObserver = typeof IntersectionObserver === 'function'
@@ -218,6 +220,60 @@ function cover(element, track, large = false, priority = false) {
     observedCovers.add(element);
     coverObserver.observe(element);
   }
+}
+
+function paintPlaylistCover(element, source, playlist, { large = false, priority = false } = {}) {
+  coverObserver?.unobserve(element);
+  observedCovers.delete(element);
+  const revision = (coverRevisions.get(element) || 0) + 1;
+  coverRevisions.set(element, revision);
+  element.replaceChildren();
+  element.classList.toggle('cover-large', large);
+  element.classList.remove('cover-loading', 'cover-error');
+  element.dataset.coverState = 'loading';
+  element.setAttribute('aria-busy', 'true');
+  const image = new Image();
+  image.alt = `Capa da playlist ${text(playlist.name, 'sem título')}`;
+  image.loading = priority ? 'eager' : 'lazy';
+  image.decoding = 'async';
+  if (priority) image.fetchPriority = 'high';
+  image.addEventListener('load', () => {
+    if (coverRevisions.get(element) !== revision) return;
+    element.replaceChildren(image);
+    element.dataset.coverState = 'loaded';
+    element.classList.remove('cover-loading', 'cover-error');
+    element.removeAttribute('aria-busy');
+  }, { once: true });
+  image.addEventListener('error', () => {
+    if (coverRevisions.get(element) !== revision) return;
+    element.dataset.coverState = 'missing';
+    element.classList.remove('cover-loading');
+    element.classList.add('cover-error');
+    element.removeAttribute('aria-busy');
+  }, { once: true });
+  image.src = source;
+}
+
+function playlistArtwork(element, playlist, tracks, options = {}) {
+  const revision = (playlistCoverRevisions.get(element) || 0) + 1;
+  playlistCoverRevisions.set(element, revision);
+  const fallbackTrack = tracks?.[0] || null;
+  if (options.iconFallback) {
+    element.replaceChildren(icon(playlist.id === 'favorites' ? 'heart' : playlist.readOnly ? 'folder' : 'music'));
+    element.dataset.coverState = 'missing';
+  } else {
+    cover(element, fallbackTrack, options.large, options.priority);
+  }
+  if (!playlist || playlist.readOnly || playlist.id === 'favorites') return;
+  void PlaylistCovers.getUrl(playlist.id).then(source => {
+    if (!source || playlistCoverRevisions.get(element) !== revision || !element.isConnected) return;
+    paintPlaylistCover(element, source, playlist, options);
+  }).catch(error => {
+    console.warn('Local Music: não foi possível recuperar a capa da playlist.', {
+      playlistId: playlist.id,
+      error: String(error)
+    });
+  });
 }
 
 function toast(message) {
@@ -368,7 +424,7 @@ function homePlaylistCard(playlist) {
   const tracks = playlistTracks(playlist);
   const art = document.createElement('span');
   art.className = 'cover';
-  cover(art, tracks[0]);
+  playlistArtwork(art, playlist, tracks);
   if (!tracks[0]) art.classList.add('playlist-placeholder');
   const title = document.createElement('strong');
   title.textContent = text(playlist.name, 'Sem título');
@@ -566,7 +622,7 @@ function playlistCard(playlist, onSelect = () => openPlaylist(playlist.id)) {
   button.dataset.playlist = playlist.id;
   const iconWrap = document.createElement('span');
   iconWrap.className = 'playlist-icon';
-  iconWrap.append(icon(playlist.id === 'favorites' ? 'heart' : playlist.readOnly ? 'folder' : 'music'));
+  playlistArtwork(iconWrap, playlist, playlistTracks(playlist), { iconFallback: true });
   const copy = document.createElement('span');
   const name = document.createElement('strong');
   name.textContent = text(playlist.name, 'Sem título');
@@ -607,8 +663,11 @@ function renderPlaylistDetail() {
   const tracks = playlistTracks(currentPlaylist);
   const total = tracks.reduce((sum, track) => sum + (Number(track.duration) || 0), 0);
   $('playlist-summary').textContent = `${tracks.length} música${tracks.length === 1 ? '' : 's'} · ${formatDuration(total)}`;
-  cover($('playlist-cover'), tracks[0], true);
+  playlistArtwork($('playlist-cover'), currentPlaylist, tracks, { large: true, priority: true });
   const editable = currentPlaylist && !currentPlaylist.readOnly && currentPlaylist.id !== 'favorites';
+  $('playlist-cover').disabled = !editable;
+  $('playlist-cover').setAttribute('aria-label', editable ? 'Escolher capa para esta playlist' : `Capa de ${currentPlaylist?.name || 'playlist'}`);
+  $('remove-playlist-cover').hidden = !editable;
   $('playlist-tracks').replaceChildren(...tracks.map((track, index) => renderTrackRow(track, tracks, {
     playlist: currentPlaylist,
     removable: currentPlaylist?.id === 'favorites' || editable,
@@ -1164,6 +1223,43 @@ function bind() {
     toast('Playlist adicionada à fila');
   });
   $('rename-playlist').addEventListener('click', () => openPlaylistDialog(currentPlaylist));
+  $('playlist-cover').addEventListener('click', () => {
+    if (!currentPlaylist || currentPlaylist.readOnly || currentPlaylist.id === 'favorites') return;
+    $('playlist-cover-input').click();
+  });
+  $('playlist-cover-input').addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !currentPlaylist || currentPlaylist.readOnly) return;
+    const playlistId = currentPlaylist.id;
+    $('playlist-cover').setAttribute('aria-busy', 'true');
+    try {
+      await PlaylistCovers.save(playlistId, file);
+      if (currentPlaylist?.id === playlistId) renderPlaylistDetail();
+      renderPlaylists();
+      renderHome();
+      toast('Capa da playlist atualizada');
+    } catch (error) {
+      console.warn('Local Music: capa de playlist rejeitada.', { playlistId, code: error?.code, error: String(error) });
+      toast(error?.message || 'Não foi possível salvar esta imagem.');
+    } finally {
+      $('playlist-cover').removeAttribute('aria-busy');
+    }
+  });
+  $('remove-playlist-cover').addEventListener('click', async () => {
+    if (!currentPlaylist || currentPlaylist.readOnly || currentPlaylist.id === 'favorites') return;
+    const playlistId = currentPlaylist.id;
+    try {
+      await PlaylistCovers.remove(playlistId);
+      if (currentPlaylist?.id === playlistId) renderPlaylistDetail();
+      renderPlaylists();
+      renderHome();
+      toast('Capa personalizada removida');
+    } catch (error) {
+      console.warn('Local Music: não foi possível remover a capa da playlist.', error);
+      toast('Não foi possível remover a capa personalizada.');
+    }
+  });
   $('delete-playlist').addEventListener('click', () => {
     const importedCollection = currentPlaylist?.kind === 'imported-collection';
     const question = importedCollection
@@ -1176,6 +1272,11 @@ function bind() {
       if (!removed) {
         toast('Não foi possível salvar a exclusão.');
         return;
+      }
+      if (!importedCollection) {
+        void PlaylistCovers.remove(currentPlaylist.id).catch(error => {
+          console.warn('Local Music: a playlist foi excluída, mas sua capa não pôde ser removida.', error);
+        });
       }
       closePlaylist();
       renderPlaylists();
@@ -1418,17 +1519,24 @@ async function init() {
   void registerServiceWorker();
   renderAll();
   try {
+    const diagnosticsBeforeRestore = Library.getDiagnostics().length;
     const restored = await Library.restore();
-    if (restored) {
-      Playlists.removeOrphanedTrackReferences(new Set(Library.getTracks().map(track => track.id)));
+    const restoreFailures = Library.getDiagnostics().slice(diagnosticsBeforeRestore).filter(item => (
+      ['persistence-timeout', 'persistence-unavailable', 'persistence-blocked', 'persistence-read-timeout', 'persistence-read-failed'].includes(item.code)
+    ));
+    if (!restored && restoreFailures.length) {
+      throw Object.assign(new Error('Não foi possível acessar a biblioteca persistida.'), {
+        diagnostics: restoreFailures
+      });
     }
   } catch (error) {
     console.warn('Local Music: não foi possível restaurar a biblioteca.', error);
-    toast('Ocorreu um problema ao abrir a biblioteca. Você pode tentar novamente recarregando o app.');
+    throw error;
   }
   renderAll();
   $('startup-error').hidden = true;
   document.documentElement.dataset.appReady = 'true';
+  $('app-startup-loading')?.remove();
 }
 
 if (document.readyState === 'loading') {

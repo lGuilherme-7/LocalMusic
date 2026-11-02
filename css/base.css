@@ -11,6 +11,13 @@ html,body {
   overflow-x:hidden;
   transition:background-color var(--transition-state) ease,color var(--transition-state) ease
 }
+html,body {
+  scrollbar-width:none
+}
+html::-webkit-scrollbar,body::-webkit-scrollbar {
+  width:0;
+  height:0
+}
 html:has(dialog[open]),
 body:has(dialog[open]) {
   overflow:hidden
@@ -26,7 +33,8 @@ button,input,select {
 button {
   color:inherit;
   cursor:pointer;
-  -webkit-tap-highlight-color:transparent
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation
 }
 .icon {
   display:inline-grid;
@@ -51,6 +59,7 @@ button:focus-visible,input:focus-visible,select:focus-visible {
   max-width:760px;
   margin:auto;
   min-height:100vh;
+  min-height:100dvh;
   background:
     radial-gradient(ellipse at 50% -20%, var(--app-glow), transparent 43%),
     radial-gradient(ellipse at 100% 24%, var(--background-ambient), transparent 42%),
@@ -494,6 +503,36 @@ section+section {
   height:112px;
   border-radius:18px;
   box-shadow:var(--shadow-small)
+}
+.playlist-cover-button {
+  position:relative;
+  flex:none;
+  padding:0;
+  border:1px solid var(--border);
+  color:inherit;
+  overflow:hidden;
+  touch-action:manipulation
+}
+.playlist-cover-button:disabled {
+  cursor:default
+}
+.playlist-cover-button:not(:disabled)::after {
+  content:"Editar";
+  position:absolute;
+  right:7px;
+  bottom:7px;
+  padding:5px 8px;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:999px;
+  background:rgba(12,8,18,.72);
+  color:#fff;
+  font-size:.68rem;
+  font-weight:700;
+  backdrop-filter:blur(8px)
+}
+.playlist-icon.cover {
+  overflow:hidden;
+  padding:0
 }
 .playlist-hero p,.about-copy {
   margin-top:6px;

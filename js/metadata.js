@@ -52,7 +52,7 @@ const Metadata = (() => {
     return new Promise((resolve) => {
       // jsmediatags é carregado via CDN como global window.jsmediatags
       if (typeof window.jsmediatags === 'undefined') {
-        resolve(_fallback(file));
+        resolve(_fallback(file, false));
         return;
       }
 
@@ -63,7 +63,7 @@ const Metadata = (() => {
         clearTimeout(timeout);
         resolve(metadata);
       };
-      const timeout = setTimeout(() => finish(_fallback(file)), 8000);
+      const timeout = setTimeout(() => finish(_fallback(file, false)), 8000);
       window.jsmediatags.read(file, {
         onSuccess(tag) {
           if (settled) return;
@@ -83,11 +83,12 @@ const Metadata = (() => {
             discNumber: _positiveInteger(t.disk || t.disc),
             year: _year(t.year),
             cover,
-            duration: 0
+            duration: 0,
+            complete: true
           });
         },
         onError() {
-          finish(_fallback(file));
+          finish(_fallback(file, true));
         }
       });
     });
@@ -98,7 +99,7 @@ const Metadata = (() => {
    * @param {File} file
    * @returns {{ title: string, artist: string, album: string, cover: null, duration: number }}
    */
-  function _fallback(file) {
+  function _fallback(file, complete = true) {
     return {
       title:    _nameFromFile(file.name),
       artist:   'Artista desconhecido',
@@ -108,7 +109,8 @@ const Metadata = (() => {
       discNumber: null,
       year: null,
       cover:    null,
-      duration: 0
+      duration: 0,
+      complete
     };
   }
 
@@ -148,7 +150,9 @@ const Metadata = (() => {
     });
   }
 
-  return { extract, getDuration };
+  const isAvailable = () => typeof window !== 'undefined' && typeof window.jsmediatags !== 'undefined';
+
+  return { extract, getDuration, isAvailable };
 
 })();
 

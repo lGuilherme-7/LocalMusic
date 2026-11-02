@@ -104,6 +104,14 @@ const Player = (() => {
     audioUrl = null;
   }
 
+  function confirmPlaying() {
+    if (!sourceMatchesCurrent() || !wantsPlayback || audio.paused) return false;
+    const changed = state !== 'playing';
+    setState('playing');
+    if (changed) emit('play');
+    return true;
+  }
+
   /**
    * Carrega uma faixa e solicita reprodução. O tempo é zerado de forma
    * síncrona, antes de qualquer metadado da nova fonte chegar.
@@ -116,7 +124,14 @@ const Player = (() => {
     detachCurrentSource();
 
     currentTrack = track;
-    audioUrl = URL.createObjectURL(playableFile(track.file));
+    try {
+      audioUrl = URL.createObjectURL(playableFile(track.file));
+    } catch (error) {
+      wantsPlayback = false;
+      setState('error', { error, force: true });
+      emit('error', error, { operation: 'source', track: currentTrack });
+      return false;
+    }
     audio.src = audioUrl;
     try {
       audio.currentTime = 0;
@@ -151,6 +166,7 @@ const Player = (() => {
       await Promise.resolve(audio.play());
       if (activePlayRequest !== request || requestedGeneration !== generation) return false;
       activePlayRequest = null;
+      confirmPlaying();
       return wantsPlayback;
     } catch (error) {
       if (activePlayRequest !== request || requestedGeneration !== generation) return false;
@@ -177,7 +193,17 @@ const Player = (() => {
 
   function togglePlayPause() {
     if (wantsPlayback || state === 'playing' || state === 'buffering') pause();
-    else void play();
+    else if (state === 'error' && currentTrack) loadTrack(currentTrack);
+    else {
+      if (state === 'ended') {
+        try {
+          audio.currentTime = 0;
+        } catch {
+          // O elemento pode ainda estar encerrando a fonte anterior no Safari.
+        }
+      }
+      void play();
+    }
   }
 
   function seek(time) {
@@ -226,15 +252,18 @@ const Player = (() => {
     if (sourceMatchesCurrent() && audio.readyState >= haveMetadata) emitTime();
   });
   audio.addEventListener('playing', () => {
-    if (!sourceMatchesCurrent() || !wantsPlayback || audio.paused || audio.readyState < haveFutureData) return;
-    setState('playing');
-    emit('play');
+    confirmPlaying();
+  });
+  audio.addEventListener('canplay', () => {
+    if (!sourceMatchesCurrent()) return;
+    if (wantsPlayback && !audio.paused) confirmPlaying();
+    else if (!wantsPlayback && state === 'loading') setState('ready');
   });
   audio.addEventListener('waiting', () => {
     if (sourceMatchesCurrent() && wantsPlayback) setState('buffering');
   });
   audio.addEventListener('stalled', () => {
-    if (sourceMatchesCurrent() && wantsPlayback) setState('buffering');
+    if (sourceMatchesCurrent() && wantsPlayback && audio.readyState < haveFutureData) setState('buffering');
   });
   audio.addEventListener('pause', () => {
     if (switchingSource || !sourceMatchesCurrent()) return;

@@ -12,6 +12,7 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="stylesheet" href="css/loading.css">
     <script>
       try {
         const savedTheme = JSON.parse(localStorage.getItem('lm_theme'));
@@ -26,6 +27,12 @@
         const showError = () => {
           const panel = document.getElementById('startup-error');
           if (panel) panel.hidden = false;
+          const loading = document.getElementById('app-startup-loading');
+          if (loading) {
+            loading.classList.add('is-error');
+            loading.querySelector('.startup-message').textContent = 'Não foi possível abrir o Local Music';
+            loading.querySelector('.startup-actions').hidden = false;
+          }
         };
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', showError, { once: true });
@@ -56,6 +63,21 @@
     <title>Local Music</title>
   </head>
   <body data-icon-system="font-awesome">
+    <div id="app-startup-loading" class="startup-screen app-startup-loading" role="status" aria-live="polite">
+      <div class="startup-card">
+        <span class="startup-disc" aria-hidden="true"><span></span></span>
+        <p class="startup-kicker">Biblioteca local</p>
+        <h1>LOCAL MUSIC</h1>
+        <div class="startup-meter" role="progressbar" aria-label="Carregando biblioteca">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p class="startup-message">Abrindo sua biblioteca</p>
+        <div class="startup-actions" hidden>
+          <p>Seus dados continuam preservados.</p>
+          <button type="button" onclick="location.reload()">Tentar novamente</button>
+        </div>
+      </div>
+    </div>
     <div class="app-shell">
       <main id="screens">
         <section class="screen active" id="screen-home" aria-label="Início">
@@ -181,7 +203,10 @@
             <button class="back-button" id="close-playlist" type="button"><i class="icon fa-solid fa-chevron-left" aria-hidden="true"></i><span id="playlist-name">Playlist</span>
             </button>
             <div class="playlist-hero">
-              <div id="playlist-cover" class="cover playlist-cover"><i class="icon fa-solid fa-music" aria-hidden="true"></i></div>
+              <button id="playlist-cover" class="cover playlist-cover playlist-cover-button" type="button" aria-label="Escolher capa para esta playlist">
+                <i class="icon fa-solid fa-music" aria-hidden="true"></i>
+              </button>
+              <input id="playlist-cover-input" type="file" accept="image/*" hidden>
               <div>
                 <h1 id="playlist-title">Playlist</h1>
                 <p id="playlist-summary">0 músicas</p>
@@ -192,6 +217,7 @@
               <button class="secondary-button" id="shuffle-playlist" type="button"><i class="icon fa-solid fa-shuffle" aria-hidden="true"></i>Aleatório</button>
               <button class="secondary-button" id="queue-playlist" type="button"><i class="icon fa-solid fa-list" aria-hidden="true"></i>Fila</button>
               <button class="icon-button" id="rename-playlist" type="button" aria-label="Renomear playlist"><i class="icon fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+              <button class="icon-button" id="remove-playlist-cover" type="button" aria-label="Remover capa personalizada" hidden><i class="icon fa-solid fa-image" aria-hidden="true"></i></button>
               <button class="icon-button danger" id="delete-playlist" type="button" aria-label="Excluir playlist"><i class="icon fa-solid fa-trash" aria-hidden="true"></i></button>
             </div>
             <ul id="playlist-tracks" class="track-list">

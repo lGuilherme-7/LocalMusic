@@ -22,6 +22,8 @@ const Library = (() => {
   let lastImportReport = emptyReport();
   const coverUrlLimit = 192;
   const metadataConcurrency = 4;
+  const metadataBatchSize = 250;
+  const initialMetadataCount = 10;
   const unknownAlbum = 'Álbum desconhecido';
 
   const emit = () => listeners.forEach(listener => listener(getTracks()));
@@ -158,7 +160,8 @@ const Library = (() => {
       translationFormat: null,
       dateAdded: clean(meta.dateAdded) || clean(meta.export?.createdAt) || new Date(file.lastModified || Date.now()).toISOString(),
       playCount: Number(meta.playCount) || 0,
-      lastPlayed: meta.lastPlayed || null
+      lastPlayed: meta.lastPlayed || null,
+      metadataScanned: false
     };
     track.identityKeys = createIdentityKeys(track);
     return track;
@@ -645,7 +648,8 @@ const Library = (() => {
       coverLastModified: Number(track.coverFile?.lastModified) || null,
       coverReference: track.coverReference, source: track.source, language: track.language, lyrics: track.lyrics,
       lyricsFile: track.lyricsFile, lyricsFormat: track.lyricsFormat, translationFile: track.translationFile,
-      translationFormat: track.translationFormat, dateAdded: track.dateAdded, playCount: track.playCount, lastPlayed: track.lastPlayed
+      translationFormat: track.translationFormat, dateAdded: track.dateAdded, playCount: track.playCount,
+      lastPlayed: track.lastPlayed, metadataScanned: Boolean(track.metadataScanned)
     };
   }
 
@@ -681,6 +685,7 @@ const Library = (() => {
       record.translationFile?.lastModified || record.fileLastModified
     );
     track.identityKeys = Array.isArray(record.identityKeys) ? record.identityKeys : createIdentityKeys(track);
+    track.metadataScanned = record.metadataScanned === true;
     track.cover = record.coverData || null;
     return track;
   }
@@ -774,6 +779,18 @@ const Library = (() => {
       });
       rebuildFolders();
       emit();
+      const pendingMetadata = Metadata.isAvailable()
+        ? tracks.filter(track => !track.metadataScanned)
+        : [];
+      if (pendingMetadata.length) {
+        const recentFirst = [...pendingMetadata].sort((left, right) => (
+          String(right.dateAdded || '').localeCompare(String(left.dateAdded || ''))
+        ));
+        const initial = recentFirst.slice(0, initialMetadataCount);
+        const remaining = recentFirst.slice(initialMetadataCount);
+        await enrichMetadata(initial);
+        if (remaining.length) void enrichMetadata(remaining);
+      }
       return Boolean(tracks.length);
     })();
     restorePromise = pendingRestore;
@@ -909,6 +926,7 @@ const Library = (() => {
         await inspectPendingCovers(track, revision);
         const metadata = await Metadata.extract(track.file);
         if (enrichmentRevisions.get(track) !== revision) return false;
+        track.metadataScanned = metadata.complete !== false;
         const metadataTitle = clean(metadata.title);
         if (track.title === displayBaseName(track.fileName) && metadataTitle && normalizedName(metadataTitle) !== normalizedName(baseName(track.fileName))) {
           track.title = metadataTitle;
@@ -942,13 +960,16 @@ const Library = (() => {
   }
 
   async function enrichMetadata(importedTracks) {
-    await runWithConcurrency(
-      importedTracks,
-      metadataConcurrency,
-      track => ensureMetadata(track, { refresh: true, persist: false })
-    );
-    await persistTracks(importedTracks);
-    emit();
+    for (let start = 0; start < importedTracks.length; start += metadataBatchSize) {
+      const batch = importedTracks.slice(start, start + metadataBatchSize);
+      await runWithConcurrency(
+        batch,
+        metadataConcurrency,
+        track => ensureMetadata(track, { refresh: true, persist: false })
+      );
+      await persistTracks(batch);
+      emit();
+    }
   }
 
   const getTracks = () => [...tracks];

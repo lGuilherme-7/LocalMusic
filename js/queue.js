@@ -11,6 +11,15 @@ const Queue = (() => {
   const active = () => shuffled || original;
   const ids = list => list.map(track => track.id);
 
+  function uniqueTracks(tracks) {
+    const seen = new Set();
+    return (Array.isArray(tracks) ? tracks : []).filter(track => {
+      if (!track || typeof track.id !== 'string' || !track.id || seen.has(track.id)) return false;
+      seen.add(track.id);
+      return true;
+    });
+  }
+
   function save() {
     Storage.set(STORAGE_KEY, {
       queue: ids(original),
@@ -22,9 +31,13 @@ const Queue = (() => {
   }
 
   function set(tracks, start = 0) {
-    original = [...tracks];
+    const selected = Array.isArray(tracks) ? tracks[start] : null;
+    original = uniqueTracks(tracks);
     shuffled = null;
-    index = Math.min(Math.max(0, start), Math.max(0, original.length - 1));
+    const selectedIndex = selected ? original.findIndex(track => track.id === selected.id) : -1;
+    index = selectedIndex >= 0
+      ? selectedIndex
+      : Math.min(Math.max(0, start), Math.max(0, original.length - 1));
     save();
   }
 
@@ -32,13 +45,20 @@ const Queue = (() => {
     const saved = Storage.get(STORAGE_KEY);
     if (!saved || !Array.isArray(saved.queue)) return false;
     const byId = new Map(tracks.map(track => [track.id, track]));
-    original = saved.queue.map(id => byId.get(id)).filter(Boolean);
+    const savedActiveIds = saved.shuffle && Array.isArray(saved.shuffledQueue) ? saved.shuffledQueue : saved.queue;
+    const savedCurrentId = savedActiveIds[Math.min(Number(saved.index) || 0, Math.max(0, savedActiveIds.length - 1))];
+    original = uniqueTracks(saved.queue.map(id => byId.get(id)).filter(Boolean));
     if (saved.shuffle && Array.isArray(saved.shuffledQueue)) {
-      shuffled = saved.shuffledQueue.map(id => byId.get(id)).filter(Boolean);
+      const restoredShuffle = uniqueTracks(saved.shuffledQueue.map(id => byId.get(id)).filter(Boolean));
+      const restoredIds = new Set(restoredShuffle.map(track => track.id));
+      shuffled = [...restoredShuffle, ...original.filter(track => !restoredIds.has(track.id))];
     } else {
       shuffled = null;
     }
-    index = Math.min(Number(saved.index) || 0, Math.max(0, active().length - 1));
+    const restoredIndex = active().findIndex(track => track.id === savedCurrentId);
+    index = restoredIndex >= 0
+      ? restoredIndex
+      : Math.min(Number(saved.index) || 0, Math.max(0, active().length - 1));
     repeat = ['normal', 'repeat-all', 'repeat-one'].includes(saved.repeat) ? saved.repeat : 'normal';
     return true;
   }
@@ -133,11 +153,13 @@ const Queue = (() => {
   function setShuffle(enabled) {
     const playing = current();
     if (enabled && !shuffled) {
-      shuffled = playing ? [playing, ...shuffledCopy(original.filter((_, position) => position !== original.indexOf(playing)))] : shuffledCopy(original);
+      shuffled = playing
+        ? [playing, ...shuffledCopy(original.filter(track => track.id !== playing.id))]
+        : shuffledCopy(original);
       index = 0;
     } else if (!enabled && shuffled) {
       shuffled = null;
-      index = Math.max(0, original.indexOf(playing));
+      index = Math.max(0, original.findIndex(track => track.id === playing?.id));
     }
     save();
   }
